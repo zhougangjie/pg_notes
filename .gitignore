@@ -1,0 +1,108 @@
+# 通用忽略规则
+.obsidian
+.DS_Store
+Thumbs.db
+build/
+*.log
+*.tmp
+*.swp
+*.synctex.gz
+*.bbl
+*.blg
+*.zip
+# *.pdf
+*.html
+*.mp4
+temp
+reveal.js/
+
+.clang-format
+
+# slidev 项目本地使用，仅保留 .md
+**/slidev/**
+!**/slidev/**/*.md
+!**/slidev/**/covers/
+!**/slidev/**/assets
+!**/slidev/**/
+
+# reveal.js仅本地保存
+Templates/slide/revealJS/reveal.js
+
+# manim
+python/media
+
+# C++ 项目
+*.o
+*.a
+*.so
+*.exe
+*.dll
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Python 项目
+__pycache__/
+*.pyc
+.venv/
+venv/
+dist/
+*.egg-info/
+
+# Node.js (for reveal-md & slidev)
+node_modules/
+yarn.lock
+package-lock.json
+dist/
+.cache/
+.slidev/
+
+
+# LaTeX Beamer 项目
+*.aux
+*.log
+*.out
+*.toc
+*.nav
+*.snm
+*.vrb
+*.fdb_latexmk
+*.fls
+
+# Pandoc temporary files
+*.tmp
+*.bak
+*.xdv
+*.run.xml
+
+# Miscellaneous
+.idea/
+.vscode/
+*.swp
+*.swo
+_minted-*
