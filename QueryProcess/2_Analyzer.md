@@ -60,21 +60,21 @@ typedef struct Query
 
 ### 查询分类
 
-`transformStmt` 处理三种不同查询 `select`(`select into` 会被视为 `create table as`，在 `transformOptionalSelectInto` 中处理)
+`transformStmt` 处理三种不同查询 `select`(`select into` 会被视为 `create table as`，在 `transformOptionalselectInto` 中处理)
 
 ```cpp
 exec_simple_query - pg_analyze_and_rewrite_fixedparams - pg_analyze_and_rewrite_fixedparams
-	transformTopLevelStmt - transformOptionalSelectInto
+	transformTopLevelStmt - transformOptionalselectInto
 		transformStmt
 			| transformValuesClause      /* values (1, 2); */
-			| transformSelectStmt        /* select a, b from tb; */
+			| transformselectStmt        /* select a, b from tb; */
 			| transformSetOperationStmt  /* select a, b from tb union values (1, 2);*/
 ```
 
 ```sql
 DROP TABLE IF EXISTS tb;
-CREATE TABLE tb  AS SELECT n AS a, n * 10 AS b, n * 100 AS c FROM generate_series(1, 5) AS n;
-SELECT a, b FROM tb where a = 2;
+CREATE TABLE tb  AS select n AS a, n * 10 AS b, n * 100 AS c FROM generate_series(1, 5) AS n;
+select a, b FROM tb where a = 2;
 ```
 
 ### 对象层级关系
@@ -94,10 +94,10 @@ SELECT a, b FROM tb where a = 2;
 
 ### 查询分析总体流程
 
-`transformSelectStmt`
+`transformselectStmt`
 
 ```cpp
-transformSelectStmt
+transformselectStmt
 	transformFromClause 		/* from tb */
 	transformTargetList 		/* select a, b */
 	transformWhereClause		/* where a = 2 */
@@ -118,7 +118,7 @@ transformSelectStmt
 ### 表的多种抽象形式
 
 1. 文本标识: `tb --- Identifier —— RangeVar`
-2. 语法分析: `RangeVar --- SelectStmt::fromClause`
+2. 语法分析: `RangeVar --- selectStmt::fromClause`
 3. 语义分析: `RangeTableEntry --- ParseState::p_rtable --- Query::p_rtable`
 4. 名称空间: `NamespaceItem --- ParseState::p_namespace`
 5. 优化结构: `RelOptInfo`: TODO
@@ -259,11 +259,73 @@ RangeVarGetRelidExtended
 
 ### 系统表缓存 `SysCache`
 
-![](../assets/QueryProcess/SysCache.png)
+![](SysCache.png)
 
 > https://cloud.tencent.com/developer/article/2000765?from_column=20421&from=20421
 
 ## 添加名称空间 `buildNSItemFromTupleDesc`
+
+为什么 PG 需要“名称空间” (NSItem)？
+
+### 两种别名方式
+
+1. `select a as x, b as y from tb;`
+
+2. `select x, y, c from tb as t(x, y);`（仅PG支持）
+
+在 PostgreSQL 中，这两种方式分别对应 **“投影别名”** 和 **“数据源别名”**。
+
+| 方式 | 语法示例 | 生效阶段 | 核心作用 |
+| --- | --- | --- | --- |
+| **投影别名** | `select a AS x ...` | **输出层** (Output) | **修饰性**：主要为了改变最终结果集的抬头，或者给表达式（如 `a+b`）取名。 |
+| **数据源别名** | `FROM tb AS t(x, y)` | **输入层** (Input) | **结构性**：在数据进入查询树时，就彻底重定义了该表的逻辑结构。 |
+
+### 为什么需要数据源别名
+
+尽管第一种方式（投影别名）看起来更直观，但在处理复杂逻辑时，第二种方式（数据源别名）具有不可替代的优势：
+
+1. **解决“无名数据”的定义问题**
+
+这是最核心的需求。对于 `VALUES` 子句、解构函数（如 `unnest`）或子查询，它们产生的数据往往没有物理列名。
+
+* 投影别名：无法在数据源处定义名称，导致 `WHERE` 或 `JOIN` 子句无法引用这些列。
+* 数据源别名：在 `FROM` 处直接给这些匿名列封装为表的形式，让整个查询块都能合法引用它们。
+
+一下两种场景必须使用数据源别名
+
+```sql
+select a from (values (1), (2), (3)) as tb(a) where a < 3;
+
+select * FROM unnest(array[1, 2, 3]) AS t(val) WHERE val > 1;
+```
+
+2. **实现“逻辑与物理”的解耦（位置绑定）**
+
+* 投影别名：是基于名字的。如果底层表字段从 `a` 改名为 `a_new`，你必须修改 `select a_new AS x`。
+* 数据源别名：是基于位置的。`t(x, y)` 永远绑定该表的第 1 列和第 2 列。SQL无需变化。
+
+3. **简化复杂查询的引用**
+
+* 投影别名：在标准 SQL 中，`select` 里的别名通常不能在同级的 `WHERE` 中直接使用，因为 `WHERE` 的执行早于 `select`。
+* 数据源别名：由于在 `FROM` 阶段就完成了定义，别名 `x, y` 在后续所有的 `WHERE`、`JOIN`、`GROUP BY` 中都是全局可见的“真名”。
+
+```sql
+select a as x, b as y, c from tb as t where x < 3; -- 失败
+select x, y  from tb2 as t(x, y) where x < 3;
+```
+
+4. **内核处理的一致性 (buildNSItem)**
+
+在内核底层，`AS t(x, y)` 会直接驱动 `buildNSItemFromTupleDesc` 创建一个**完整的逻辑视图**。
+
+* 如果使用方式一，内核需要维护一套复杂的“别名追踪机制”来确保 `ORDER BY` 能找到 `select` 里的 `x`。
+* 如果使用方式二，内核直接把 `x` 存入 `NSItem` 的逻辑入口。对解析器来说，`x` 就是这列的“本名”，处理起来路径更短、性能更高。
+
+5. **局限性**
+
+不适用超宽表的部分列起别名，如1000列的表要为第800列其别名，按位置绑定时只能前八百列都起名占位，此时用`a as x`更好。
+
+![400](assets/namespaceitem.png)
 
 ## 分析列名 `select a, b`
 

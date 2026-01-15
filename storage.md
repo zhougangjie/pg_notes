@@ -3,7 +3,7 @@
 
 ## Page
 
-![disk page organization](./assets/disk_page.png)
+![disk page organization](QueryProcess/assets/disk_page.png)
 
 [bufpage.h](src/include/storage/bufpage.h)
 
