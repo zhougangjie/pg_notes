@@ -26,7 +26,7 @@ git checkout REL_16_11
 cd postgres
 mkdir build && cd build
 CFLAGS="-O0 -g3 -fno-inline -fno-omit-frame-pointer" \
-../configure  --prefix=$HOME/app/pgdebug --without-icu --enable-debug --enable-cassert
+../configure  --prefix=$HOME/app/pgdebug --without-icu --with-libxml --enable-debug --enable-cassert
 make -j4
 make install
 # make distclean
