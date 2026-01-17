@@ -1,4 +1,3 @@
-
 # 语义分析 `parse_analyze_fixedparams`
 
 ## Overview
@@ -218,7 +217,7 @@ SysCache[RELNAMENSP]
 1. 获取`relid` (`RangeVar`->`relid`)
 
    1. 由于 `RelCache` 不支持字符串查找，内核首先访问 `SysCache`（具体为 `RELNAMENSP` 缓存）
-   2. 利用 `RangeVar` 提供的表名和 Schema 信息进行匹配，获取该表的唯一身份id：`relid`
+   2. 利用 `RangeVar` 提供的表名和 Schema 信息进行匹配，获取该表的唯一身份 id：`relid`
 
 2. 查找表结构 (`relid`->`Relation`)
    1. 拿到 `relid` 后，内核转而访问 `RelCache`
@@ -271,13 +270,13 @@ RangeVarGetRelidExtended
 
 1. `select a as x, b as y from tb;`
 
-2. `select x, y, c from tb as t(x, y);`（仅PG支持）
+2. `select x, y, c from tb as t(x, y);`（仅 PG 支持）
 
 在 PostgreSQL 中，这两种方式分别对应 **“投影别名”** 和 **“数据源别名”**。
 
-| 方式        | 语法示例                 | 生效阶段             | 核心作用             |
-| --------- | -------------------- | ---------------- | ---------------- |
-| **投影别名**  | `select a AS x ...`  | **输出层** (Output) | **修饰性**：重命名输出列   |
+| 方式           | 语法示例             | 生效阶段            | 核心作用                     |
+| -------------- | -------------------- | ------------------- | ---------------------------- |
+| **投影别名**   | `select a AS x ...`  | **输出层** (Output) | **修饰性**：重命名输出列     |
 | **数据源别名** | `FROM tb AS t(x, y)` | **输入层** (Input)  | **结构性**：重定义表结构标识 |
 
 ### 为什么需要数据源别名?
@@ -291,11 +290,15 @@ select a from (values (1), (2), (3)) as tb(a) where a < 3;
 2. 简化复杂查询的引用
 
 ```sql
-select x, y  from tb2 as t(x, y) where x < 3;
+select x, y, c  from tb as t(x, y) where x < 3;
 ```
 
 3. 表结构标识重命名
-![500](assets/NamespaceItem.png)
+
+`buildRelationAliases` 合并用户定义的别名和原列名形成完整的别名结构 `Alias` 保存到 RTE 的 `eref` 字段
+
+![500](assets/2_Analyzer/aliases.png)
+
 ## 分析列名 `select a, b`
 
 `qry->targetList = transformTargetList`
@@ -303,7 +306,7 @@ select x, y  from tb2 as t(x, y) where x < 3;
 ```cpp
 transformTargetList /* parser/parse_target.c */
 	transformTargetEntry
-		transformExpr /* parser/parser_expr.c */
+		transformExpr --> expr/* parser/parser_expr.c */
 			transformExprRecurse
 				transformColumnRef
 					colNameToVar /* parser/parser_relation.c*/
@@ -313,20 +316,35 @@ transformTargetList /* parser/parse_target.c */
 								specialAttNum(colname) /* quick check to see if name could be a system column */
 									SystemAttributeByName /* ctid, xmin, cmin, xmax, cmax, tableoid */
 								SearchSysCacheExists2
+							makeVar
+		makeTargetEntry
+			tle->expr, tle->resno, tle->resname
+			return TargetEntry
 		FigureColname
 		makeTargetEntry /* creates a TargetEntry node */
 ```
 
-> Entry 后缀：某类实体的标准化描述单元，代表 “一个可枚举、可管理的独立条目”，PostgreSQL 源码中大量使用 XXXEntry 命名的结构体，核心设计思路是：将某一类 “有明确边界、可独立描述、需纳入集合管理” 的实体，封装为 XXXEntry 结构体，作为该类实体的最小描述单元。
->
-> - 独立性：每个 Entry 描述一个独立的实体（如 RTE 描述一个表 / 子查询，TE 描述一个目标列）；
-> - 可枚举：多个 Entry 会被组织为列表（List \*）管理（如 Query->rtable 是 RTE 列表，Query->targetList 是 TE 列表）；
-> - 结构化：通过字段完整描述实体的核心属性，覆盖 “身份、类型、属性、关联关系”；
-> - 贯穿性：从解析阶段生成，到优化 / 执行阶段全程复用，是查询生命周期的核心数据载体。
-
 ## 分析过滤条件 `where a = 2`
 
-`qry->sortClause = transformSortClause`
+`qual = transformWhereClause`
+
+操作符元数据查询，`pg_operator` 元数据中重点关注
+
+
+```sql
+select * from pg_operator where oprname = '=';
+
+select * from pg_operator where oid = 96;
+
+select * from pg_type where oid = 23;
+```
+
+- `prname`: 操作符名称
+- `oprleft`: 左操作符类型oid
+- `oprright`: 右操作符类型oid
+- `oprcode`: 操作符的函数实现
+
+语义分析过程
 
 ```cpp
 transformWhereClause
@@ -344,24 +362,16 @@ transformWhereClause
 				result->opno = oprid(tup); /* pg_operator: oid=96 | oprname='=' | oprcode='int4eq' */
 				result->opfuncid = opform->oprcode; /*op_proc: oid=65 | proname='int4eq' */
 				result->args = args
+				
+qry->jointree = makeFromExpr(pstate->p_joinlist, qual);
 ```
 
-<!-- 
+<!--
 
 ## 查询重写
 
 1. 相关函数: `pg_rewrite_query`
 
-2. 核心结构：`Query` 
+2. 核心结构：`Query`
 
 -->
-
-- 用户写下 **`RangeVar`**（语法层）。
-    
-- 内核为其创建 **`RTE`**（逻辑层），并生成 **`NSItem`**（语义搜索层）作为对外窗口。
-    
-- 用户引用一列，解析器通过 **`NSItem`** 找到它，并构建一个 **`Var`**（原语层）。
-    
-- 这个 **`Var`** 被塞进一个 **`TargetEntry`**，告诉数据库：这是我要的一列。
-    
-- 执行器启动，将物理行装入 **`TupleTableSlot`**，**`Var`** 根据偏移量从中抠出值，完成最终输出。
