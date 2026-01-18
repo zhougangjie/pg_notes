@@ -1,5 +1,24 @@
 # Executor
 
+
+## Portal
+
+Receiver<---->Portal<---->Executor<---->Access<---->Storage
+
+```cpp
+CreatePortal /* Create unnamed portal to run the query or queries in */
+PortalDefineQuery /* A simple subroutine to establish a portal's query */
+PortalStart /* Prepare a portal for execution */
+	CreateQueryDesc /* Create QueryDesc in portal's context */
+PortalRun /* Run a portal's query or queries */
+PortalDrop /*  */
+```
+
+核心结构
+
+- `Portal`
+- `QueryDesc`
+
 ## ExecutePlan
 
 Processes the query plan until we have retrieved 'numberTuples' tuples, moving in the specified direction.

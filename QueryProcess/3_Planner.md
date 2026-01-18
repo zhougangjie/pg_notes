@@ -1,102 +1,47 @@
 # Planner
 
-## 查询计划
+参考文档: https://www.interdb.jp/pg/pgsql03/02.html
 
-[plannodes.h](..src/include/nodes/plannodes.h)
+在 PostgreSQL 的逻辑层（Query Tree 阶段），最核心的逻辑算子主要有以下几类：
 
-相关函数: `pg_plan_query`
+1. 扫描算子 (Scan / RangeTable) 
+2. 过滤算子 (Filter / Quals) 
+3. 连接算子 (Join) 
+4. 投影算子 (Project / TargetList) 
+5. 聚合算子 (Aggregate / Grouping) 
+6. 排序算子 (Sort) 
+7. 集合算子 (Set Operations) 
 
-`PlannedStmt`
+### 逻辑算子与物理算子的转换（核心对比）
 
-```cpp
-typedef struct PlannedStmt
-{
-	pg_node_attr(no_equal, no_query_jumble)
-	NodeTag		type;
-	CmdType		commandType;	/* select|insert|update|delete|merge|utility */
-	uint64		queryId;		/* query identifier (copied from Query) */
-	bool		hasReturning;	/* is it insert|update|delete RETURNING? */
-	bool		hasModifyingCTE;	/* has insert|update|delete in WITH? */
-	struct Plan *planTree;		/* tree of Plan nodes */
-	List	   *rtable;			/* list of RangeTblEntry nodes */
-	/* ... */
-	Node	   *utilityStmt;	/* non-null if this is utility stmt */
-}
-```
+FROM -> WHERE -> GROUP BY -> HAVING -> SELECT -> DISTINCT -> ORDER BY -> LIMIT
 
-`Plan`
+逻辑层只决定 **“要做什么”** ，而物理层（Planner 之后）决定 **“具体怎么做”**。
 
-```cpp
-typedef struct Plan
-{
-	pg_node_attr(abstract, no_equal, no_query_jumble)
-	NodeTag		type;
-	/* estimated execution costs for plan (see costsize.c for more info) */
-	Cost		startup_cost;	/* cost expended before fetching any tuples */
-	Cost		total_cost;		/* total cost (assuming all tuples fetched) */
-	/* planner's estimate of result size of this plan step */
-	Cardinality plan_rows;		/* number of rows plan is expected to emit */
-	int			plan_width;		/* average row width in bytes */
-}
-```
+| 逻辑算子 (What) | 物理算子示例 (How) |
+| --- | --- |
+| **扫描 (Scan)** | `SeqScan`, `IndexScan`, `BitmapHeapScan` |
+| **连接 (Join)** | `NestLoop`, `HashJoin`, `MergeJoin` |
+| **聚合 (Agg)** | `HashAggregate` (哈希), `GroupAggregate` (排序后分组) |
+| **去重 (Distinct)** | `Unique` (排序去重), `HashAggregate` (哈希去重) |
 
-`Scan`
+- 逻辑算子定意图
+- 物理算子定实现
+- 代价模型定优劣
+
+## 函数调用基本逻辑
 
 ```cpp
-/*
- * ==========
- * Scan nodes
- *
- * Scan is an abstract type that all relation scan plan types inherit from.
- * ==========
- */
-typedef struct Scan
-{
-	pg_node_attr(abstract)
-	Plan		plan;
-	Index		scanrelid;		/* relid is index into the range table */
-} Scan;
+pg_plan_queries
+	pg_plan_query: commandType != CMD_UTILITY
+		planner
+			standard_planner: PlannerGlobal
+				/* primary planning entry point (may recurse for subqueries) */
+				root = subquery_planner(glob, parse, NULL, false, tuple_fraction);
+
+				/* Select best Path and turn it into a Plan */
+				final_rel = fetch_upper_rel(root, UPPERREL_FINAL, NULL);
+				best_path = get_cheapest_fractional_path(final_rel, tuple_fraction);
+				
+				top_plan = create_plan(root, best_path);
 ```
-
-```cpp
-/* ----------------
- *		sequential scan node
- * ----------------
- */
-typedef struct SeqScan
-{
-	Scan		scan;
-} SeqScan;
-```
-
-```cpp
-typedef struct IndexScan
-{
-	Scan		scan;
-	Oid			indexid;		/* OID of index to scan */
-	List	   *indexqual;		/* list of index quals (usually OpExprs) */
-	List	   *indexqualorig;	/* the same in original form */
-	List	   *indexorderby;	/* list of index ORDER BY exprs */
-	List	   *indexorderbyorig;	/* the same in original form */
-	List	   *indexorderbyops;	/* OIDs of sort ops for ORDER BY exprs */
-	ScanDirection indexorderdir;	/* forward or backward or don't care */
-} IndexScan;
-```
-
-## Portal
-
-Receiver<---->Portal<---->Executor<---->Access<---->Storage
-
-```cpp
-CreatePortal /* Create unnamed portal to run the query or queries in */
-PortalDefineQuery /* A simple subroutine to establish a portal's query */
-PortalStart /* Prepare a portal for execution */
-	CreateQueryDesc /* Create QueryDesc in portal's context */
-PortalRun /* Run a portal's query or queries */
-PortalDrop /*  */
-```
-
-核心结构
-
-- `Portal`
-- `QueryDesc`
