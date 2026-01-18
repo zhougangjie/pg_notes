@@ -120,3 +120,28 @@ SELECT * FROM tb WHERE a > $1;
 EXECUTE stmt(1);
 EXECUTE stmt(2);
 ```
+
+## Full Select
+
+```sql
+-- 创建订单表
+CREATE TABLE orders (
+    order_id serial PRIMARY KEY,
+    customer_id int,
+    region text,
+    amount numeric,
+    order_date date
+);
+
+-- 填充模拟数据：3个区域，100个客户，共1000条订单
+INSERT INTO orders (customer_id, region, amount, order_date)
+SELECT 
+    (floor(random() * 100) + 1)::int,          -- 100个随机客户
+    (ARRAY['North', 'South', 'East'])[floor(random() * 3) + 1], -- 3个区域
+    (random() * 500)::numeric(10,2),           -- 随机金额
+    '2025-01-01'::date + (random() * 365)::int -- 2025年内的随机日期
+FROM generate_series(1, 1000);
+
+-- 建立一个索引，观察优化器是否会利用它来“加速水流”
+CREATE INDEX idx_orders_region_customer ON orders(region, customer_id);
+```
