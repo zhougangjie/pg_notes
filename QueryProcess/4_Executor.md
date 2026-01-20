@@ -2,7 +2,7 @@
 
 ## 数据流转路径
 
-Client<---->Portal<---->Executor<---->Access<---->Storage
+Client<---->TCop<---->Portal<---->Executor<---->Access<---->[ Buffer/WAL ]<---->Storage
 
 - **Storage --> Access**：数据从 **磁盘 Page**（二进制块）转换成了 **HeapTuple**（原始行）。
 - **Access --> Executor**：数据从 **物理行** 被包装进了 **TupleTableSlot**（统一的槽位，屏蔽了是索引行还是表行的差异）。
