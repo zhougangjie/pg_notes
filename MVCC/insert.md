@@ -1,4 +1,5 @@
 ![](assets/insert.png)
+
 # insert流程
 
 ```cpp
@@ -36,7 +37,7 @@ select txid_current();
 insert into tb values (1);
 ```
 
-插入后不提交，此时新开一个 psql 命令行无法查询到 tb 中的数据，但是使用 pageinspector 工具可以看到记录已经占据了页面空间
+插入后不提交，此时新开一个 psql 客户端无法查询到 tb 中的数据，但是使用 pageinspector 工具可以看到已经有记录已经占据了页面空间，upper 为 8160
 
 ```sql
 select from tb;
@@ -51,7 +52,7 @@ select * from page_header(get_raw_page('tb', 0));
 (1 row)
 ```
 
-使用 `heap_page_items` 函数查看这条记录的头部信息
+使用 `heap_page_items` 函数查看这条记录的头部信息，lp_off 即元组偏移，恰好为 upper 值，lp_len 是元组长度，28 字节不是 8 的倍数，因此填充为 32 字节，恰好满足为 `pagesize-upper` 的值
 
 ```sql
 select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomask from heap_page_items(get_raw_page('tb', 0));
@@ -63,7 +64,7 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 ```
 
 `lp`: 行指针序号
-`lp_off`: 物理偏移量
+`lp_off`: 页面内物理偏移量
 `lp_flags`: 状态标记(1: LP_NORMAL， 2: REDIRECT, 3: DEAD, 0: UNUSED)
 `lp_len`: 元组长度。这行数据（含头+数据+对齐）总共占用了 28 字节，实际存储占用 32 字节（8 字节对齐）
 `t_xmin`: 插入事务 ID。表示这个元组是由事务号为 1228 的操作创建的
