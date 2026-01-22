@@ -1,25 +1,35 @@
 # Storage
 
-## table and file
+## table and page
 
 ```sql
 -- 空表初始文件 0 KB
-create table tbl (a int);
+create table tb (a int);
 
 -- 插入第一行数据，文件扩展为 8 KB
-insert into tbl values (1);
-
--- 获取表的文件路径
-select pg_relation_filepath('tbl');
+insert into tb values (1), (2), (3);
 ```
 
-![](assets/page.png)
+![](assets/page/page.png)
 
-## pageinspect 介绍
+## `pageinspect` 介绍
 
 - PostgreSQL 提供的一个内省扩展模块
 - 允许用户通过 SQL 界面直接观察磁盘数据页（Page）的原始二进制内容及元数据结构
 - 代码位于 `postgres/contrib/pageinspect/`，编译后使用 
+
+```sh
+# 1. 自动获取PG服务端头文件目录（模糊化安装路径） 
+PG_INCLUDE=$(<PG_INSTALL_DIR>/bin/pg_config --includedir-server) 
+
+# 2. 编译扩展（指定PG版本+头文件路径） 
+make PG_CONFIG=<PG_INSTALL_DIR>/bin/pg_config CPPFLAGS="-I$PG_INCLUDE" 
+
+# 3. 安装扩展（指定PG版本） 
+make install PG_CONFIG=<PG_INSTALL_DIR>/bin/pg_config
+```
+
+psql 客户端运行
 
 ```sql
 create extension pageinspect;
@@ -27,36 +37,19 @@ create extension pageinspect;
 
 常用函数说明：
 
-- get_raw_page: 从磁盘读取原始 8KB 数据块
-- page_header: 查看 LSN、lower、upper 等页头元数据
-- heap_page_items: 解析行指针和元组头（xmin, xmax）
+- `get_raw_page`: 从磁盘读取原始 8KB 数据块
+- `page_header`: 查看 LSN、lower、upper 等页头元数据
+- `heap_page_items`: 解析行指针和元组头（xmin, xmax）
 
-- bt_page_items: 查看索引记录及其指向的元组地址
-- heap_page_item_attrs: 解码字段内容
+- `bt_page_items`: 查看索引记录及其指向的元组地址
+- `heap_page_item_attrs`: 解码字段内容
 
 ## page
 
 查询页头信息
 
 ```sql
-select * from page_header(get_raw_page('tbl', 0));
-+-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
-|    lsn    | checksum | flags | lower | upper | special | pagesize | version | prune_xid |
-+-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
-| 0/2926898 |        0 |     0 |    28 |  8160 |    8192 |     8192 |       4 |         0 |
-+-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
-```
-
-继续插入两条数据
-
-```sql
-insert into tbl values (1), (1);
-```
-
-再次查询页头信息
-
-```sql
-select * from page_header(get_raw_page('tbl', 0));
+select * from page_header(get_raw_page('tb', 0));
 +-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
 |    lsn    | checksum | flags | lower | upper | special | pagesize | version | prune_xid |
 +-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
@@ -64,13 +57,9 @@ select * from page_header(get_raw_page('tbl', 0));
 +-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
 ```
 
-- lower += 8
-- upper -= 64
-
-
 原因
 
-![](assets/page2.png)
+![](assets/page/page.png)
 
 源码结构
 
@@ -92,21 +81,40 @@ typedef struct PageHeaderData
 
 ## tuple
 
-`HeapTupleData`: 元组在内存中的管理工具（内存句柄）
-`HeapTupleHeaderData`: 元组在磁盘上的二进制布局（物理实体）
-
-```cpp
-/* HeapTupleData is an in-memory data structure that points to a tuple */
-typedef struct HeapTupleData
-{
-	uint32		t_len;			/* length of *t_data */
-	ItemPointerData t_self;		/* SelfItemPointer */
-	Oid			t_tableOid;		/* table the tuple came from */
-	HeapTupleHeader t_data;		/* -> tuple header and data */
-} HeapTupleData;
+```sql
+select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomask from heap_page_items(get_raw_page('tb', 0));
++----+--------+----------+--------+--------+--------+----------+--------+------------+
+| lp | lp_off | lp_flags | lp_len | t_xmin | t_xmax | t_field3 | t_ctid | t_infomask |
++----+--------+----------+--------+--------+--------+----------+--------+------------+
+|  1 |   8160 |        1 |     28 |   1228 |      0 |        0 | (0,1)  |       2048 |
++----+--------+----------+--------+--------+--------+----------+--------+------------+
 ```
 
+![](assets/page/page.png)
+
+`ItemIdData`: 元组行指针 line pointer
+`HeapTupleHeaderData`: 元组在磁盘上的二进制布局信息
+
 ```cpp
+typedef struct ItemIdData
+{
+	unsigned	lp_off:15,		/* offset to tuple (from start of page) */
+				lp_flags:2,		/* state of line pointer, see below */
+				lp_len:15;		/* byte length of tuple */
+} ItemIdData;
+
+typedef struct HeapTupleFields
+{
+	TransactionId t_xmin;		/* inserting xact ID */
+	TransactionId t_xmax;		/* deleting or locking xact ID */
+
+	union
+	{
+		CommandId	t_cid;		/* inserting or deleting command ID, or both */
+		TransactionId t_xvac;	/* old-style VACUUM FULL xact ID */
+	}			t_field3;
+} HeapTupleFields;
+
 struct HeapTupleHeaderData
 {
 	union
@@ -124,11 +132,4 @@ struct HeapTupleHeaderData
 
 	/* MORE DATA FOLLOWS AT END OF STRUCT */
 };
-```
-
-## update
-
-```sql
--- 执行一次更新，制造旧版本数据
-UPDATE test_mvcc SET val = 'world' WHERE id = 1;
 ```

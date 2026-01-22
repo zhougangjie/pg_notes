@@ -15,11 +15,24 @@ select pg_relation_filepath('tbl');
 
 ![](assets/page.png)
 
-## pageinspect 介绍
+## `pageinspect` 介绍
 
 - PostgreSQL 提供的一个内省扩展模块
 - 允许用户通过 SQL 界面直接观察磁盘数据页（Page）的原始二进制内容及元数据结构
 - 代码位于 `postgres/contrib/pageinspect/`，编译后使用 
+
+```sh
+# 1. 自动获取PG服务端头文件目录（模糊化安装路径） 
+PG_INCLUDE=$(<PG_INSTALL_DIR>/bin/pg_config --includedir-server) 
+
+# 2. 编译扩展（指定PG版本+头文件路径） 
+make PG_CONFIG=<PG_INSTALL_DIR>/bin/pg_config CPPFLAGS="-I$PG_INCLUDE" 
+
+# 3. 安装扩展（指定PG版本） 
+make install PG_CONFIG=<PG_INSTALL_DIR>/bin/pg_config
+```
+
+psql 客户端运行
 
 ```sql
 create extension pageinspect;
@@ -27,12 +40,12 @@ create extension pageinspect;
 
 常用函数说明：
 
-- get_raw_page: 从磁盘读取原始 8KB 数据块
-- page_header: 查看 LSN、lower、upper 等页头元数据
-- heap_page_items: 解析行指针和元组头（xmin, xmax）
+- `get_raw_page`: 从磁盘读取原始 8KB 数据块
+- `page_header`: 查看 LSN、lower、upper 等页头元数据
+- `heap_page_items`: 解析行指针和元组头（xmin, xmax）
 
-- bt_page_items: 查看索引记录及其指向的元组地址
-- heap_page_item_attrs: 解码字段内容
+- `bt_page_items`: 查看索引记录及其指向的元组地址
+- `heap_page_item_attrs`: 解码字段内容
 
 ## page
 
@@ -67,13 +80,6 @@ select * from page_header(get_raw_page('tbl', 0));
 - lower += 8
 - upper -= 64
 
-
-原因
-
-![](assets/page2.png)
-
-源码结构
-
 ```cpp
 typedef struct PageHeaderData
 {
@@ -88,49 +94,6 @@ typedef struct PageHeaderData
 	TransactionId pd_prune_xid; /* oldest prunable XID, or zero if none */
 	ItemIdData	pd_linp[FLEXIBLE_ARRAY_MEMBER]; /* line pointer array */
 } PageHeaderData;
-```
-
-## tuple
-
-`HeapTupleData`: 元组在内存中的管理工具（内存句柄）
-`HeapTupleHeaderData`: 元组在磁盘上的二进制布局（物理实体）
-
-```cpp
-/* HeapTupleData is an in-memory data structure that points to a tuple */
-typedef struct HeapTupleFields
-{
-	TransactionId t_xmin;		/* inserting xact ID */
-	TransactionId t_xmax;		/* deleting or locking xact ID */
-	union
-	{
-		CommandId	t_cid;		/* inserting or deleting command ID, or both */
-		TransactionId t_xvac;	/* old-style VACUUM FULL xact ID */
-	}			t_field3;
-} HeapTupleFields;
-
-typedef struct DatumTupleFields
-{
-	int32		datum_len_;		/* varlena header (do not touch directly!) */
-	int32		datum_typmod;	/* -1, or identifier of a record type */
-	Oid			datum_typeid;	/* composite type OID, or RECORDOID */
-} DatumTupleFields;
-
-struct HeapTupleHeaderData
-{
-	union
-	{
-		HeapTupleFields t_heap;
-		DatumTupleFields t_datum;
-	}			t_choice;
-
-	ItemPointerData t_ctid;		/* current TID of this or newer tuple (or a speculative insertion token) */
-	uint16		t_infomask2;	/* number of attributes + various flags */
-	uint16		t_infomask;		/* various flag bits, see below */
-	uint8		t_hoff;			/* sizeof header incl. bitmap, padding */
-
-	/* ^ - 23 bytes - ^ */
-	bits8		t_bits[FLEXIBLE_ARRAY_MEMBER];	/* bitmap of NULLs */
-};
 ```
 
 ## update

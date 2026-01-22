@@ -1,6 +1,8 @@
-![](assets/insert.png)
+![](assets/page/insert.svg)
 
-# insert流程
+# insert
+
+## insert流程
 
 ```cpp
 ExecutePlan - ExecProcNode - ExecProcNodeFirst
@@ -10,12 +12,12 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
                 RelationGetBufferForTuple
                 RelationPutHeapTuple
                     PageAddItem - PageAddItemExtended
-                        alignedSize = MAXALIGN(size);
-                        PageGetItemId
-                        ItemIdSetNormal
-                        memcpy((char *) page + upper, item, size);
-                        phdr->pd_lower = (LocationIndex) lower;
-	                    phdr->pd_upper = (LocationIndex) upper;
+                        alignedSize = MAXALIGN(size); /* 8 字节对齐 */
+                        PageGetItemId /* 获取 ItemId */
+                        ItemIdSetNormal /* 设置元组偏移、标记、长度 */
+                        memcpy((char *) page + upper, item, size); /* 拷贝元组到 upper 位置 */
+                        phdr->pd_lower = (LocationIndex) lower; /* 更新 phdr lower */
+	                    phdr->pd_upper = (LocationIndex) upper; /* 更新 phdr upper */
                         return offsetNumber;
                     item->t_ctid = tuple->t_self;
                 MarkBufferDirty
@@ -105,7 +107,7 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 +----+--------+----------+--------+--------+--------+----------+--------+------------+
 ```
 
-再次使用 heap_page_items 发现 t_infomask 变为 2304 = 2048 + 256 = HEAP_XMIN_COMMITTED + HEAP_XMAX_INVALID
+再次使用 `heap_page_items` 发现 `t_infomask` 变为 2304 = 2048 + 256 = `HEAP_XMIN_COMMITTED` + `HEAP_XMAX_INVALID`
 
 解释：基于 Hint Bits 的延迟状态更新
 
@@ -131,4 +133,38 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 - 操作：进程将元组的 t_infomask 中的 HEAP_XMIN_INVALID 位置为 1。
 - 后果：这行数据从此变成了“脏数据”或“陈旧元组”。虽然它物理上还占着那 32 字节的空间，但所有查询都会直接无视它。
 
+## tuple
 
+`HeapTupleData`: 元组在内存中的管理工具（内存句柄）
+`HeapTupleHeaderData`: 元组在磁盘上的二进制布局（物理实体）
+
+```cpp
+/* HeapTupleData is an in-memory data structure that points to a tuple */
+typedef struct HeapTupleData
+{
+	uint32		t_len;			/* length of *t_data */
+	ItemPointerData t_self;		/* SelfItemPointer */
+	Oid			t_tableOid;		/* table the tuple came from */
+	HeapTupleHeader t_data;		/* -> tuple header and data */
+} HeapTupleData;
+```
+
+```cpp
+struct HeapTupleHeaderData
+{
+	union
+	{
+		HeapTupleFields t_heap;
+		DatumTupleFields t_datum;
+	}			t_choice;
+	ItemPointerData t_ctid;		/* current TID of this or newer tuple */
+	uint16		t_infomask2;	/* number of attributes + various flags */
+	uint16		t_infomask;		/* various flag bits, see below */
+	uint8		t_hoff;			/* sizeof header incl. bitmap, padding */
+	/* ^ - 23 bytes - ^ */
+
+	bits8		t_bits[FLEXIBLE_ARRAY_MEMBER];	/* bitmap of NULLs */
+
+	/* MORE DATA FOLLOWS AT END OF STRUCT */
+};
+```
