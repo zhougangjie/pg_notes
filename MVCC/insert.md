@@ -1,5 +1,25 @@
+![](assets/insert.png)
+# insert流程
 
-# insert
+```cpp
+ExecutePlan - ExecProcNode - ExecProcNodeFirst
+    ExecModifyTable - ExecInsert
+        table_tuple_insert -heapam_tuple_insert
+            heap_insert
+                RelationGetBufferForTuple
+                RelationPutHeapTuple
+                    PageAddItem - PageAddItemExtended
+                        alignedSize = MAXALIGN(size);
+                        PageGetItemId
+                        ItemIdSetNormal
+                        memcpy((char *) page + upper, item, size);
+                        phdr->pd_lower = (LocationIndex) lower;
+	                    phdr->pd_upper = (LocationIndex) upper;
+                        return offsetNumber;
+                    item->t_ctid = tuple->t_self;
+                MarkBufferDirty
+                XLogInsert
+```
 
 依赖扩展: `pageinspector`: 用于直接查看页面和元组信息
 
@@ -110,10 +130,4 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 - 操作：进程将元组的 t_infomask 中的 HEAP_XMIN_INVALID 位置为 1。
 - 后果：这行数据从此变成了“脏数据”或“陈旧元组”。虽然它物理上还占着那 32 字节的空间，但所有查询都会直接无视它。
 
-## insert select
 
-HeapTupleSatisfiesVisibility
-
-## delete
-
-## update
