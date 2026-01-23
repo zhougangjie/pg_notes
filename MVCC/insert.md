@@ -23,6 +23,7 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
                 MarkBufferDirty
                 XLogInsert
 ```
+## insert 的延迟状态更新
 
 依赖扩展: `pageinspector`: 用于直接查看页面和元组信息
 
@@ -30,12 +31,10 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
 drop table if exists tb;
 create table tb(a int);
 ```
-
-开启事务并插入数据:
+关闭自动提交并插入数据
 
 ```sql
-begin;
-select txid_current();
+\set AUTOCOMMIT off
 insert into tb values (1);
 ```
 
@@ -53,8 +52,7 @@ select * from page_header(get_raw_page('tb', 0));
 +-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
 (1 row)
 ```
-
-使用 `heap_page_items` 函数查看这条记录的头部信息，lp_off 即元组偏移，恰好为 upper 值，lp_len 是元组长度，28 字节不是 8 的倍数，因此填充为 32 字节，恰好满足为 `pagesize-upper` 的值
+此时 t_xmin 表示插入数据的事务 id
 
 ```sql
 select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomask from heap_page_items(get_raw_page('tb', 0));
@@ -73,7 +71,7 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 `t_xmax`: 删除/锁定事务 ID。0 表示该行目前是“活的”，尚未被删除或更新
 `t_field3`: 命令 ID (t_cid)。表示这是事务 1228 里的第几个命令（从 0 开始计数）
 `t_ctid`: 物理指针, 指向最新版本
-`t_infomask`: 状态信息， HEAP_XMAX_INVALID
+`t_infomask`: 状态信息， `HEAP_XMAX_INVALID`
 
 此时执行提交
 
@@ -92,7 +90,7 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 +----+--------+----------+--------+--------+--------+----------+--------+------------+
 ```
 
-访问一下 tb
+另启客户端访问一下 tb
 
 ```sql
 select from tb;
@@ -132,39 +130,3 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 - 判定：后续进程查 CLOG 发现事务已回滚。
 - 操作：进程将元组的 t_infomask 中的 HEAP_XMIN_INVALID 位置为 1。
 - 后果：这行数据从此变成了“脏数据”或“陈旧元组”。虽然它物理上还占着那 32 字节的空间，但所有查询都会直接无视它。
-
-## tuple
-
-`HeapTupleData`: 元组在内存中的管理工具（内存句柄）
-`HeapTupleHeaderData`: 元组在磁盘上的二进制布局（物理实体）
-
-```cpp
-/* HeapTupleData is an in-memory data structure that points to a tuple */
-typedef struct HeapTupleData
-{
-	uint32		t_len;			/* length of *t_data */
-	ItemPointerData t_self;		/* SelfItemPointer */
-	Oid			t_tableOid;		/* table the tuple came from */
-	HeapTupleHeader t_data;		/* -> tuple header and data */
-} HeapTupleData;
-```
-
-```cpp
-struct HeapTupleHeaderData
-{
-	union
-	{
-		HeapTupleFields t_heap;
-		DatumTupleFields t_datum;
-	}			t_choice;
-	ItemPointerData t_ctid;		/* current TID of this or newer tuple */
-	uint16		t_infomask2;	/* number of attributes + various flags */
-	uint16		t_infomask;		/* various flag bits, see below */
-	uint8		t_hoff;			/* sizeof header incl. bitmap, padding */
-	/* ^ - 23 bytes - ^ */
-
-	bits8		t_bits[FLEXIBLE_ARRAY_MEMBER];	/* bitmap of NULLs */
-
-	/* MORE DATA FOLLOWS AT END OF STRUCT */
-};
-```
