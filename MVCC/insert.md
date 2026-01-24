@@ -1,4 +1,4 @@
-![](assets/page/insert.svg)
+![](assets/insert.svg)
 
 # insert
 

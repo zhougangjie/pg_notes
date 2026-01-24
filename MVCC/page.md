@@ -10,7 +10,7 @@ create table tb (a int);
 insert into tb values (1), (2), (3);
 ```
 
-![](assets/page/page.png)
+![](assets/page.png)
 
 ## `pageinspect` 介绍
 
@@ -59,7 +59,7 @@ select * from page_header(get_raw_page('tb', 0));
 
 原因
 
-![](assets/page/page.png)
+![](assets/page.png)
 
 源码结构
 
@@ -90,7 +90,7 @@ select lp, lp_off, lp_flags, lp_len, t_xmin, t_xmax, t_field3, t_ctid, t_infomas
 +----+--------+----------+--------+--------+--------+----------+--------+------------+
 ```
 
-![](assets/page/page.png)
+![](assets/page.png)
 
 `ItemIdData`: 元组行指针 line pointer
 `HeapTupleHeaderData`: 元组在磁盘上的二进制布局信息
