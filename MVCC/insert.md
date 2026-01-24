@@ -23,6 +23,7 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
                 MarkBufferDirty
                 XLogInsert
 ```
+
 ## insert 的延迟状态更新
 
 依赖扩展: `pageinspector`: 用于直接查看页面和元组信息
@@ -31,6 +32,7 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
 drop table if exists tb;
 create table tb(a int);
 ```
+
 关闭自动提交并插入数据
 
 ```sql
@@ -52,6 +54,7 @@ select * from page_header(get_raw_page('tb', 0));
 +-----------+----------+-------+-------+-------+---------+----------+---------+-----------+
 (1 row)
 ```
+
 此时 t_xmin 表示插入数据的事务 id
 
 ```sql
