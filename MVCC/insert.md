@@ -9,6 +9,7 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
     ExecModifyTable - ExecInsert
         table_tuple_insert -heapam_tuple_insert
             heap_insert
+	            TransactionId xid = GetCurrentTransactionId();
                 RelationGetBufferForTuple
                 RelationPutHeapTuple
                     PageAddItem - PageAddItemExtended
@@ -21,7 +22,32 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
                         return offsetNumber;
                     item->t_ctid = tuple->t_self;
                 MarkBufferDirty
+                
+                /* WAL */
+                XLogBeginInsert
+                XLogRegisterData
+                XLogRegisterBuffer
+                XLogRegisterBufData
+                XLogRegisterBufData
+                XLogSetRecordFlags
                 XLogInsert
+                PageSetLSN
+```
+
+xact
+
+```cpp
+exec_simple_query | finish_xact_command | CommitTransactionCommand
+    CommitTransaction | RecordTransactionCommit
+        /* WAL */
+        XactLogCommitRecord
+        
+        /* Marks the given transaction and children as committed */
+        TransactionIdCommitTree | TransactionIdSetTreeStatus | TransactionIdSetPageStatus
+            TransactionIdSetPageStatusInternal
+                SimpleLruReadPage
+                TransactionIdSetStatusBit
+                    *byteptr = byteval;
 ```
 
 ## insert 的延迟状态更新
