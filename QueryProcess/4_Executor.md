@@ -89,6 +89,11 @@ for (;;)
 ```cpp
 ExecProcNode - ExecSeqScan
     ExecScan - ExecScanFetch - SeqNext // executor module
+        table_beginscan
+            heap_beginscan
+                scan->rs_base.rs_rd = relation;
+                scan->rs_base.rs_snapshot = snapshot;
+                scan->rs_base.rs_nkeys = nkeys;
         /* Access + Storage*/
         table_scan_getnextslot - heap_getnextslot - heapgettup_pagemode
             heapgetpage - ReadBufferExtended -  ReadBuffer_common
