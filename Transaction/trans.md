@@ -27,17 +27,22 @@
 - **事务本身没问题**：指令是合法的。
 - **并发逻辑有问题**：它掩盖了数据状态的真实演变过程。
 
-| 事务A                                                  | 事务B                                                  |
-| ------------------------------------------------------ | ------------------------------------------------------ |
-| `BEGIN ISOLATION LEVEL READ COMMITTED;`                |                                                        |
-|                                                        | `BEGIN ISOLATION LEVEL READ COMMITTED;`                |
-| `select * from accounts;`                              |                                                        |
-|                                                        | `select * from accounts;`                              |
-| `update accounts set balance = 100 + 50 where id = 1;` |                                                        |
-| `commit`                                               |                                                        |
-|                                                        | `update accounts set balance = 100 - 20 where id = 1;` |
-|                                                        | `commit`                                               |
-| `select * from accounts;`                              |                                                        |
+```sql
+create table tb(id int, account int);
+insert into tb(id, account) values (1, 100);
+```
+
+| 事务A                                              | 事务B                                              |
+| ------------------------------------------------ | ------------------------------------------------ |
+| `BEGIN ISOLATION LEVEL READ COMMITTED;`          |                                                  |
+|                                                  | `BEGIN ISOLATION LEVEL READ COMMITTED;`          |
+| `select * from tb;`                              |                                                  |
+|                                                  | `select * from tb;`                              |
+| `update tb set account = 100 + 50 where id = 1;` |                                                  |
+| `commit`                                         |                                                  |
+|                                                  | `update tb set account = 100 - 20 where id = 1;` |
+|                                                  | `commit`                                         |
+| `select * from tb;` 结果为80，丢失+50                  |                                                  |
 
 解决方法:
 
