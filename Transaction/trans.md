@@ -16,7 +16,7 @@
 
 ## 隔离级别
 
-![](../assets/iso.png)
+![](./assets/iso.png)
 
 [图示隔离级别和相关异常](assets/draw_iso.md)
 
@@ -49,3 +49,20 @@ insert into tb(id, account) values (1, 100);
 1. 使用RR隔离级别`BEGIN ISOLATION LEVEL REPEATABLE READ;`
 2. 使用行级锁 `select * from accounts for update;`
 3. 使用原子更新 `update accounts set balance = balance + 50 where id = 1;`
+
+## 持久性
+
+wal
+
+[draw_wal](assets/draw_wal.md)
+
+checkpoint 触发时机
+
+- 时间触发：后台 checkpoint 进程会定时检查时间，如果距离上次 checkpoint 执行开始时的间隔超过了指定值，就会触发 checkpoint。这个指定值是配置文件的checkpoint_timeout 值，范围在 30s ~ 1 day，默认值为300s。
+- wal日志：当最新的 wal 日志，和上次 checkpoint 的刷新点的距离大于指定值，就会触发 checkpoint。
+- 手动触发：当用户执行checkpoint命令也会触发，这个命令必须由超级用户才能执行。
+- 数据库关闭：当数据库正常关闭时，会触发一次 checkpoint 。
+- 基础备份：当进行数据基础备份时，会执行pg_start_backup命令，触发 checkpoint。
+- 数据库崩溃修复：数据库异常退出后，比如数据库进程被kill -9，来不及清理操作 。在重新启动时，会进行崩溃修复，修复完成后会触发 checkpoint。
+
+![](assets/checkpoint.png)

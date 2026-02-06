@@ -13,7 +13,7 @@ insert into tbl values (1);
 select pg_relation_filepath('tbl');
 ```
 
-![](assets/page.png)
+![](../MVCC/assets/page.png)
 
 ## `pageinspect` 介绍
 
