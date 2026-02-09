@@ -66,3 +66,21 @@ checkpoint 触发时机
 - 数据库崩溃修复：数据库异常退出后，比如数据库进程被kill -9，来不及清理操作 。在重新启动时，会进行崩溃修复，修复完成后会触发 checkpoint。
 
 ![](assets/checkpoint.png)
+
+## `pg_walinspect` 介绍
+
+- 代码位于 `postgres/contrib/pg_walinspect/`，编译后使用 
+
+```sh
+# 1. 自动获取PG服务端头文件目录（模糊化安装路径） 
+PG_INCLUDE=$(~app/pgdebug/bin/pg_config --includedir-server) 
+
+# 2. 编译扩展（指定PG版本+头文件路径） 
+make PG_CONFIG=~app/pgdebug/bin/pg_config CPPFLAGS="-I$PG_INCLUDE" 
+
+# 3. 安装扩展（指定PG版本） 
+make install PG_CONFIG=~app/pgdebug/bin/pg_config
+
+# 4. 客户端安装扩展到数据库实例
+create extension pg_walinspect;
+```
