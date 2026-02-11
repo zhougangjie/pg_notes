@@ -8,13 +8,15 @@ exec_simple_query
         StartTransactionCommand
             StartTransaction
                 s->state = TRANS_START;
-                
                 /* initialize current transaction state fields */
-
-                XactIsoLevel = DefaultXactIsoLevel;
-                
+                /* ... */
                 s->state = TRANS_INPROGRESS;
         xact_started = true;
+    pg_analyze_and_rewrite_fixedparams
+    pg_plan_queries
+    CreatePortal
+    PortalDefineQuery
+    PortalStart
     PortalRun | PortalRunMulti | ProcessQuery /* tcop */
         CreateQueryDesc
         ExecutorStart
