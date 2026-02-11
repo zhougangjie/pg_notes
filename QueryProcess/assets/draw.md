@@ -170,7 +170,7 @@ flag:
 HeapTupleHeaderData ^ZGzN8iBp
 
 ## Embedded Files
-67534d2cbd1ad6002ba4d090b6814bc4940b4273: [[../../SysCache.png]]
+67534d2cbd1ad6002ba4d090b6814bc4940b4273: [[../../assets/SysCache.png]]
 
 %%
 ## Drawing

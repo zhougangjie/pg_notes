@@ -84,3 +84,15 @@ make install PG_CONFIG=~app/pgdebug/bin/pg_config
 # 4. 客户端安装扩展到数据库实例
 create extension pg_walinspect;
 ```
+
+## `transaction` 管理
+
+```cpp
+exec_simple_query
+    start_xact_command
+        StartTransactionCommand
+        xact_started = true;
+    finish_xact_command
+        CommitTransactionCommand
+        xact_started = false;
+```
