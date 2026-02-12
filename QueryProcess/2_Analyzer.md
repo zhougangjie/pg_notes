@@ -297,7 +297,7 @@ select x, y, c  from tb as t(x, y) where x < 3;
 
 `buildRelationAliases` 合并用户定义的别名和原列名形成完整的别名结构 `Alias` 保存到 RTE 的 `eref` 字段
 
-![500](assets/2_Analyzer/aliases.png)
+![500](assets/aliases.png)
 
 ## 分析列名 `select a, b`
 
