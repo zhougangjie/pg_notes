@@ -14,7 +14,7 @@ static TransactionStateData TopTransactionStateData = {
 };
 ```
 
-**1. `BEGIN;` —— 事务的初始化（控制面状态建立）**
+## **1. `BEGIN;` **
 
 这一步主要是控制面在“运行环境”中为你预留位子。
 
@@ -39,7 +39,7 @@ exec_simple_query
             s->blockState = TBLOCK_INPROGRESS;
 ```
 
-**2. `INSERT INTO tb VALUES(1);` —— 事务的执行（控制面与数据面协同）**
+## **2. `INSERT INTO tb VALUES(1);`**
 
 这是最复杂的阶段，涉及了你之前研究的所有核心技术。
 
@@ -90,7 +90,7 @@ exec_simple_query
     finish_xact_command /* This will only do something if the parsetree list was empty */
 ```
 
-**3. `COMMIT;` —— 事务的终结（控制面承诺的兑现）**
+## **3. `COMMIT;` **
 
 这一步是确保“原子性”和“持久性”的关键。
 
@@ -130,18 +130,15 @@ exec_simple_query
             s->blockState = TBLOCK_DEFAULT;
 ```
 
-核心技术总结
+## 核心技术
 
-| 步骤   | 涉及技术（控制面/运行面）     | 涉及技术（数据面）             | 目的               |
-| ------ | ----------------------------- | ------------------------------ | ------------------ |
-| BEGIN  | Transaction State, VirtualXID | -                              | 环境准备           |
-| INSERT | Lock Manager, Syscache, XID   | Shared Buffer, FSM, WAL Buffer | 逻辑执行与物理写入 |
-| COMMIT | CLOG, MVCC                    | Disk (WAL File)                | 状态确认与持久化   |
-
+| 步骤       | 涉及技术（控制面/运行面）                 | 涉及技术（数据面）                      | 目的        |
+| -------- | ----------------------------- | ------------------------------ | --------- |
+| `BEGIN`  | Transaction State, VirtualXID | -                              | 环境准备      |
+| `INSERT` | Lock Manager, Syscache, XID   | Shared Buffer, FSM, WAL Buffer | 逻辑执行与物理写入 |
+| `COMMIT` | CLOG, MVCC                    | Disk (WAL File)                | 状态确认与持久化  |
 
 - **锁（Lock）** 保证了你执行时没人捣乱。
 - **MVCC/CLOG** 保证了别人什么时候能看到你的修改。
 - **WAL** 保证了你答应的修改绝对不会丢。
 - **Buffer** 保证了你操作数据时的极致速度。
-
-这就是一个最简单的 `INSERT` 背后，数据库内核控制面与数据面完美交织的流程。
