@@ -1,5 +1,6 @@
 # PG 事务物理事务id
 
+https://www.interdb.jp/pg/pgsql05/01.html
 
 - **VXID** 是事务在内存中的临时工牌
 - **XID (Transaction ID)** 就是写入数据页（Page Header）和日志（WAL）的“永久烙印”
