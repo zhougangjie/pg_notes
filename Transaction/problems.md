@@ -55,7 +55,7 @@
 5. 在 REPEATABLE_READ 隔离级别下，为什么同一事务中的多条 SELECT 结果一致？
 6. 活跃事务数组（ProcArray）的作用是什么？如何维护？
 
-### 问题5：隔离级别实现
+### 问题5：隔离级别实现 [trans_iso](trans_iso.md)
 
 1. PostgreSQL 实现了哪些隔离级别？哪些可能出现脏读、不可重复读、幻读？
 2. READ_COMMITTED 与 REPEATABLE_READ 在快照获取上的区别是什么？
@@ -63,12 +63,11 @@
 4. 如何检测序列化冲突？什么时候抛出 SERIALIZATION_FAILURE 错误？
 5. deferrable 事务的作用是什么？
 
-### 问题6：事务可见性判断
+### 问题6：事务可见性判断 [mvcc_visibility](mvcc_visibility.md)
 
-1. HeapTupleSatisfiesMVCC() 函数如何判断一个行对当前事务是否可见？
-2. 在 INSERT、UPDATE、DELETE 时，可见性规则有何不同？
-3. 事务的 xmin 和 xmax 是如何计算的？
-4. 为什么需要检查事务是否已提交、已回滚或仍在进行？
+1. `HeapTupleSatisfiesMVCC()` 函数如何判断一个行对当前事务是否可见？
+2. 事务的 xmin 和 xmax 是如何计算的？
+3. 为什么需要检查事务是否已提交、已回滚或仍在进行？
 
 ---
 
