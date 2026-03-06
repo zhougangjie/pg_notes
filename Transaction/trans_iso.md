@@ -19,7 +19,7 @@ drop table if exists stuff;
 
 create table stuff (
     name text primary key,
-    status int  -- 0 = 空闲, 1 = 值班
+    status int  -- 0 = 休假, 1 = 值班
 );
 
 insert into stuff values ('A', 1), ('B', 1);
@@ -33,19 +33,19 @@ begin
 	update stuff
 	set status = 0
 	where name = p_name
-    and (select count(*) from stuff where status = 1) > 0;
+    and (select count(*) from stuff where name != p_name and status = 1) > 0;
 end;
 $$ language plpgsql;
 ```
 
 2. 并发更新
 
-| Employee A                 | Employee B                 |
-| -------------------------- | -------------------------- |
-| `begin;`                   | `begin;`                   |
-| `call update_status('A');` |                            |
-|                            | `call update_status('B');` |
-| `commit;`                  | `commit;`                  |
+| Employee A                                           | Employee B                                           |
+| ---------------------------------------------------- | ---------------------------------------------------- |
+| `start transaction isolation level repeatable read;` | `start transaction isolation level repeatable read;` |
+| `call update_status('A');`                           |                                                      |
+|                                                      | `call update_status('B');`                           |
+| `commit;`                                            | `commit;`                                            |
 
 3. 最终结果
 
@@ -110,7 +110,7 @@ postgres=# select * from stuff;
 - 然而，事务 3 的输出（与事务 2 并发但不与事务 1 并发）却与相反的串行顺序一致，即“事务 1 先于事务 2"。
 - 归根结底，事务 3 的输出无法与产生最终状态的任何串行顺序相吻合。
 
-![](assets/RR_anomaly.png)
+![700](assets/RR_anomaly.png)
 
 **与“幻读”的区别**
 
