@@ -42,7 +42,8 @@ pg_analyze_and_rewrite_fixedparams
 		transformStmt | transformUpdateStmt
 			setTargetTable | parserOpenTable(pstate, relation, RowExclusiveLock)
 				table_openrv_extended | relation_openrv_extended | RangeVarGetRelidExtended
-					LockRelationOid /* Lock a relation given only its OID */
+					LockRelationOid /* lmgr.c */
+						LockAcquireExtended /* lock.c */
 ```
 
 ### 3. transactionid lock
