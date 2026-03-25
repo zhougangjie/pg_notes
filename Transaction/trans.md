@@ -1,6 +1,7 @@
 # Transaction
 
-- 隔离性: https://postgres-internals.cn/docs/chapter02/
+- 隔离性1: https://www.postgresql.org/docs/16/transaction-iso.html
+- 隔离性2: https://postgres-internals.cn/docs/chapter02/
 - 快照: https://postgres-internals.cn/docs/chapter04/
 - 预写式日志: https://postgres-internals.cn/docs/chapter10/
 - WAL: https://www.interdb.jp/pg/pgsql09/index.html
@@ -15,10 +16,14 @@
 | **一致性 (C)** | 它是 A+I+D 的综合结果 + **数据完整性约束**      | 包括 唯一索引、外键、Check 约束等主动校验。              |
 
 ## 隔离级别
+| Isolation Level  | Dirty Read             | Nonrepeatable Read | Phantom Read           | Serialization Anomaly |
+| ---------------- | ---------------------- | ------------------ | ---------------------- | --------------------- |
+| Read uncommitted | Allowed, but not in PG | Possible           | Possible               | Possible              |
+| Read committed   | Not possible           | Possible           | Possible               | Possible              |
+| Repeatable read  | Not possible           | Not possible       | Allowed, but not in PG | Possible              |
+| Serializable     | Not possible           | Not possible       | Not possible           | Not possible          |
 
-![](./assets/iso.png)
-
-[图示隔离级别和相关异常](assets/draw_iso.md)
+[异常图示](assets/draw_iso.md)
 
 ## 丢失更新
 

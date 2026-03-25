@@ -12,8 +12,8 @@
 - **[tcop.md](./tcop.md)** - 顶层命令处理层 (Top-level Command Optimizer & Planner)
 - **[acrh.md](./acrh.md)** - 架构设计与核心组件
 - **[compile.md](./compile.md)** - 编译与构建过程
-- **[memory.md](./memory.md)** - 内存管理机制
-- **[storage.md](./storage.md)** - 存储管理概览
+- **[memory.md](Storage/memory.md)** - 内存管理机制
+- **[storage.md](Storage/storage.md)** - 存储管理概览
 - **[code_dir.md](./code_dir.md)** - 源代码目录结构
 
 ### 专题目录
