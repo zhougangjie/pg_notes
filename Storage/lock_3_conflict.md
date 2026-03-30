@@ -1,4 +1,4 @@
-# conflict in update
+# lock conflict
 
 ```sql
 begin;
@@ -6,7 +6,7 @@ select * from tb;
 ```
 
 ```sql
-drop table tb;
+alter table tb add c int;
 ```
 
 ```text
@@ -14,9 +14,10 @@ exec_simple_query
     PortalRun | PortalRunMulti | PortalRunUtility | ProcessUtility
         standard_ProcessUtility | ProcessUtilitySlow
             AlterTableLookupRelation | RangeVarGetRelidExtended
-                LockRelationOid | LockAcquireExtended
-                    WaitOnLock | ProcSleep | WaitLatch
-                        WaitEventSetWait | WaitEventSetWaitBlock
+                LockRelationOid | LockAcquireExtended | WaitOnLock
+	                ProcSleep
+	                    WaitLatch | WaitEventSetWait /* src/backend/storage/ipc/latch.c */
+		                    WaitEventSetWaitBlock
 ```
 
 ```text
