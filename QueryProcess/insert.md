@@ -2,6 +2,21 @@
 
 # insert
 
+- 调试语句：`insert into tb values(1)`
+
+## `exec_simple_query` 流程概览
+
+```cpp
+start_xact_command
+pg_parse_query
+pg_analyze_and_rewrite_fixedparams
+pg_plan_queries
+PortalDefineQuery
+PortalRun | PortalRunMulti | ProcessQuery /* tcop */
+EndCommand
+finish_xact_command
+```
+
 ## insert流程
 
 ```cpp
@@ -22,7 +37,7 @@ ExecutePlan - ExecProcNode - ExecProcNodeFirst
                         return offsetNumber;
                     item->t_ctid = tuple->t_self;
                 MarkBufferDirty
-                
+
                 /* WAL */
                 XLogBeginInsert
                 XLogRegisterData
@@ -41,7 +56,7 @@ exec_simple_query | finish_xact_command | CommitTransactionCommand
     CommitTransaction | RecordTransactionCommit
         /* WAL */
         XactLogCommitRecord
-        
+
         /* Marks the given transaction and children as committed */
         TransactionIdCommitTree | TransactionIdSetTreeStatus | TransactionIdSetPageStatus
             TransactionIdSetPageStatusInternal
