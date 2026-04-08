@@ -4,6 +4,134 @@
 
 ---
 
+
+### 🔑 关键特性
+
+| 特性             | 说明                                     | 好处               |
+| ---------------- | ---------------------------------------- | ------------------ |
+| **树形结构**     | 子上下文随父上下文一起删除               | 批量清理，避免遗漏 |
+| **生命周期绑定** | 上下文名 = 生命周期（Query/Transaction） | 代码意图清晰       |
+| **隔离性**       | 不同上下文的内存互不干扰                 | 避免野指针/误释放  |
+| **调试友好**     | 可打印内存使用统计                       | 方便排查泄漏       |
+
+---
+
+## 核心 API 速查表
+
+### 3.1 创建/删除
+
+```c
+// 创建标准分配集上下文（最常用）
+MemoryContext ctx = AllocSetContextCreate(
+    parent,           // 父上下文
+    "MyContext",      // 名称（调试用）
+    ALLOCSET_DEFAULT_SIZES  // 内存块大小策略
+);
+
+// 创建短生命周期上下文（自动清理优化）
+MemoryContext ctx = AllocSetContextCreate(
+    parent,
+    "ShortLived",
+    ALLOCSET_SMALL_SIZES  // 小块内存优化
+);
+
+// 删除上下文（递归删除所有子上下文 + 释放内存）
+MemoryContextDelete(ctx);
+```
+
+### 3.2 切换/分配
+
+```c
+// 切换"当前上下文"（后续 palloc 都分配到这里）
+MemoryContext old_ctx = MemoryContextSwitchTo(ctx);
+
+// 分配内存（自动绑定到当前上下文）
+void *ptr = palloc(size);
+char *str = pstrdup("hello");  // 字符串专用
+Node *node = palloc0(sizeof(Node));  // 清零版本
+
+// 切回原上下文
+MemoryContextSwitchTo(old_ctx);
+
+// 在当前上下文分配（不切换）
+void *ptr = MemoryContextAlloc(ctx, size);
+```
+
+### 3.3 释放/重置
+
+```c
+// ❌ 不要单独 free 单个 palloc 对象（除非用 pfree）
+pfree(ptr);  // 可以，但很少用
+
+// ✅ 推荐：重置上下文（释放所有内存，但保留上下文本身）
+MemoryContextReset(ctx);  // 适合循环/批处理场景
+
+// ✅ 推荐：删除上下文（释放内存 + 销毁上下文对象）
+MemoryContextDelete(ctx);  // 适合生命周期结束
+```
+
+### 3.4 调试/监控
+
+```c
+// 打印上下文内存使用统计（开发调试用）
+MemoryContextStats(TopMemoryContext);
+
+// 检查指针属于哪个上下文（调试野指针）
+MemoryContextGetParent(ctx);
+
+// 设置内存分配失败回调（高级）
+MemoryContextSetFailureHandler(ctx, handler);
+```
+
+### 3.5 类比文件系统
+
+| **MemoryContext 概念**    | **文件系统类比**  | **说明**                     |
+| ------------------------- | ----------------- | ---------------------------- |
+| `MemoryContext`           | 目录 (Directory)  | 内存对象的容器               |
+| `TopMemoryContext`        | 根目录 `/`        | 永远存在，所有目录的父节点   |
+| `palloc()`                | `touch file`      | 在当前目录下创建文件         |
+| `CurrentMemoryContext`    | `pwd`             | 新文件默认创建在这里         |
+| `MemoryContextSwitchTo()` | `cd /path/to/dir` | 切换当前工作目录             |
+| `MemoryContextDelete()`   | `rm -rf dir`      | 删除目录及旗下所有文件       |
+| `MemoryContextReset()`    | `rm -rf dir/*`    | 清空内容，目录留着下次复用   |
+| 子上下文                  | 子目录            | 父目录删除时，子目录自动被删 |
+| 内存泄漏                  | 忘记删临时目录    | 文件残留，占用磁盘空间       |
+
+---
+
+## 实际场景：一条 SELECT 的内存生命周期
+
+```
+──────────────────────────────────────────────────────
+1. 连接建立
+   → 创建 PortalContext
+──────────────────────────────────────────────────────
+2. 收到 SQL: "SELECT * FROM users WHERE id = 1"
+   → 切换到 QueryContext
+   → parse_analyze(): palloc 语法树节点
+   → pg_plan_query(): palloc 执行计划节点
+──────────────────────────────────────────────────────
+3. Executor 执行
+   → 创建 ExprContext/TupleContext（子上下文）
+   → 每行结果：在 TupleContext 分配 → 发送 → Reset
+   → （循环中复用内存，避免频繁 malloc）
+──────────────────────────────────────────────────────
+4. 查询结束
+   → MemoryContextDelete(QueryContext)
+   → ✅ 所有 palloc 的内存一键释放，无泄漏
+──────────────────────────────────────────────────────
+5. 连接关闭
+   → MemoryContextDelete(PortalContext)
+   → ✅ 连接级资源全部清理
+──────────────────────────────────────────────────────
+```
+
+> 🔑 **关键观察**：
+>
+> - 每个阶段有明确的上下文边界
+> - 子上下文用于"临时/循环"内存，父上下文用于"阶段"内存
+> - 出错时直接删除上层上下文，自动清理所有子内存
+
 ## 调试
 
 ```cpp
@@ -140,7 +268,7 @@ main
 MemoryContextSwitchTo(MessageContext);
 MemoryContextResetAndDeleteChildren(MessageContext);
 exec_simple_query
-	
+
 	/* create and switch to TopTransactionContext */
 	start_xact_command
 		StartTransactionCommand
@@ -150,18 +278,18 @@ exec_simple_query
 					CurTransactionContext = TopTransactionContext;
 					MemoryContextSwitchTo(CurTransactionContext);
 		MemoryContextSwitchTo(CurTransactionContext);
-	
+
 	/* switch to: MessageContext */
 	oldcontext = MemoryContextSwitchTo(MessageContext);
 	pg_parse_query
-	
+
 	/* do something in CurTransactionContext */
-		
+
 	/* switch to: MessageContext */
 	pg_analyze_and_rewrite_fixedparams
 	pg_plan_queries
-	
-	
+
+
 	CreatePortal
 		portal->portalContext = AllocSetContextCreate(TopPortalContext, ...)
 	PortalDefineQuery
@@ -177,46 +305,72 @@ exec_simple_query
 			/* switch to: QueryContext */
 			MemoryContextSwitchTo(estate->es_query_cxt)
 			InitPlan | ExecInitNode | ExecInitSeqScan
-				
+
 				/* create expression context for node */
 				ExecAssignExprContext | CreateExprContext | CreateExprContextInternal
 					econtext->ecxt_per_tuple_memory = AllocSetContextCreate(estate->es_query_cxt, "ExprContext")
 
 		MemoryContextSwitchTo(PortalContext)
-		
+
 		MemoryContextSwitchTo(MessageContext)
 
 	MemoryContextSwitchTo(TopTransactionContext)
-	
+
 	PortalRun
 		MemoryContextSwitchTo(PortalContext)
-		PortalRunSelect | ExecutorRun | standard_ExecutorRun
-			MemoryContextSwitchTo(estate->es_query_cxt)
-			printtup_startup
-				/* a temporary memory context that we can reset once per row to recover palloc'd memory */
-				myState->tmpcontext = AllocSetContextCreate(CurrentMemoryContext, "printtup", ...)
-			ExecutePlan
+		PortalRunSelect
+			ExecutorRun | standard_ExecutorRun
+				MemoryContextSwitchTo(estate->es_query_cxt)
+				printtup_startup
+					/* a temporary memory context that we can reset once per row to recover palloc'd memory */
+					myState->tmpcontext = AllocSetContextCreate(CurrentMemoryContext, "printtup", ...)
+				ExecutePlan
 
-				/* Loop until we've processed the proper number of tuples from the plan. */
-				ResetPerTupleExprContext(estate);
+					/* Loop until we've processed the proper number of tuples from the plan. */
+					ResetPerTupleExprContext(estate); /* (estate)->es_per_tuple_exprcontext */
 
-				ExecProcNode | ExecSeqScan | ExecScan
-				
-					ResetExprContext(node->ps.ps_ExprContext);
-					
-					/* get a tuple for(;;)*/
-					ExecProject
-						ExecEvalExprSwitchContext
-							oldContext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
-							retDatum = state->evalfunc(state, econtext, isNull);
-							MemoryContextSwitchTo(oldContext);
-							return retDatum;
-				printtup
-					/* Switch into per-row context so we can recover memory below */
-					oldcontext = MemoryContextSwitchTo(myState->tmpcontext);
-					
-					MemoryContextSwitchTo(QueryContext)
-					MemoryContextReset(myState->tmpcontext)
+					ExecProcNode | ExecSeqScan | ExecScan
+
+						ResetExprContext(node->ps.ps_ExprContext);
+
+						/* get a tuple for(;;)*/
+						ExecProject
+							ExecEvalExprSwitchContext
+								oldContext = MemoryContextSwitchTo(econtext->ecxt_per_tuple_memory);
+								retDatum = state->evalfunc(state, econtext, isNull);
+								MemoryContextSwitchTo(oldContext);
+								return retDatum;
+					printtup
+						/* Switch into per-row context so we can recover memory below */
+						oldcontext = MemoryContextSwitchTo(myState->tmpcontext);
+
+						/* send message, text/binary */
+
+						MemoryContextSwitchTo(QueryContext)
+						MemoryContextReset(myState->tmpcontext)
+			dest->rShutdown(dest);
+				printtup_shutdown
+					MemoryContextDelete(myState->tmpcontext);
+
+	PortalDrop
+		portal->cleanup(portal);
+			PortalCleanup
+				ExecutorFinish
+				ExecutorEnd
+					standard_ExecutorEnd
+						FreeExecutorState
+							FreeExprContext
+								MemoryContextDelete
+							MemoryContextDelete(estate->es_query_cxt);
+				FreeQueryDesc
+		MemoryContextDelete(portal->portalContext);
+
+	finish_xact_command
+		CommitTransactionCommand
+			CommitTransaction
+				AtCommit_Memory
+					MemoryContextSwitchTo(TopMemoryContext);
+					MemoryContextDelete(TopTransactionContext);
 ```
 
 ```
@@ -236,129 +390,3 @@ Delete: PortalContext
 Delete: TopTransactionContext
 Switch to: MessageContext
 ```
-### 🔑 关键特性
-
-| 特性             | 说明                                     | 好处               |
-| ---------------- | ---------------------------------------- | ------------------ |
-| **树形结构**     | 子上下文随父上下文一起删除               | 批量清理，避免遗漏 |
-| **生命周期绑定** | 上下文名 = 生命周期（Query/Transaction） | 代码意图清晰       |
-| **隔离性**       | 不同上下文的内存互不干扰                 | 避免野指针/误释放  |
-| **调试友好**     | 可打印内存使用统计                       | 方便排查泄漏       |
-
----
-
-## 核心 API 速查表
-
-### 3.1 创建/删除
-
-```c
-// 创建标准分配集上下文（最常用）
-MemoryContext ctx = AllocSetContextCreate(
-    parent,           // 父上下文
-    "MyContext",      // 名称（调试用）
-    ALLOCSET_DEFAULT_SIZES  // 内存块大小策略
-);
-
-// 创建短生命周期上下文（自动清理优化）
-MemoryContext ctx = AllocSetContextCreate(
-    parent,
-    "ShortLived",
-    ALLOCSET_SMALL_SIZES  // 小块内存优化
-);
-
-// 删除上下文（递归删除所有子上下文 + 释放内存）
-MemoryContextDelete(ctx);
-```
-
-### 3.2 切换/分配
-
-```c
-// 切换"当前上下文"（后续 palloc 都分配到这里）
-MemoryContext old_ctx = MemoryContextSwitchTo(ctx);
-
-// 分配内存（自动绑定到当前上下文）
-void *ptr = palloc(size);
-char *str = pstrdup("hello");  // 字符串专用
-Node *node = palloc0(sizeof(Node));  // 清零版本
-
-// 切回原上下文
-MemoryContextSwitchTo(old_ctx);
-
-// 在当前上下文分配（不切换）
-void *ptr = MemoryContextAlloc(ctx, size);
-```
-
-### 3.3 释放/重置
-
-```c
-// ❌ 不要单独 free 单个 palloc 对象（除非用 pfree）
-pfree(ptr);  // 可以，但很少用
-
-// ✅ 推荐：重置上下文（释放所有内存，但保留上下文本身）
-MemoryContextReset(ctx);  // 适合循环/批处理场景
-
-// ✅ 推荐：删除上下文（释放内存 + 销毁上下文对象）
-MemoryContextDelete(ctx);  // 适合生命周期结束
-```
-
-### 3.4 调试/监控
-
-```c
-// 打印上下文内存使用统计（开发调试用）
-MemoryContextStats(TopMemoryContext);
-
-// 检查指针属于哪个上下文（调试野指针）
-MemoryContextGetParent(ctx);
-
-// 设置内存分配失败回调（高级）
-MemoryContextSetFailureHandler(ctx, handler);
-```
-
-### 3.5 类比文件系统
-
-| **MemoryContext 概念**    | **文件系统类比**  | **说明**                     |
-| ------------------------- | ----------------- | ---------------------------- |
-| `MemoryContext`           | 目录 (Directory)  | 内存对象的容器               |
-| `TopMemoryContext`        | 根目录 `/`        | 永远存在，所有目录的父节点   |
-| `palloc()`                | `touch file`      | 在当前目录下创建文件         |
-| `CurrentMemoryContext`    | `pwd`             | 新文件默认创建在这里         |
-| `MemoryContextSwitchTo()` | `cd /path/to/dir` | 切换当前工作目录             |
-| `MemoryContextDelete()`   | `rm -rf dir`      | 删除目录及旗下所有文件       |
-| `MemoryContextReset()`    | `rm -rf dir/*`    | 清空内容，目录留着下次复用   |
-| 子上下文                  | 子目录            | 父目录删除时，子目录自动被删 |
-| 内存泄漏                  | 忘记删临时目录    | 文件残留，占用磁盘空间       |
-
----
-
-## 实际场景：一条 SELECT 的内存生命周期
-
-```
-┌──────────────────────────────────────────────────────
-│ 1. 连接建立
-│    → 创建 PortalContext
-├──────────────────────────────────────────────────────
-│ 2. 收到 SQL: "SELECT * FROM users WHERE id = 1"
-│    → 切换到 QueryContext
-│    → parse_analyze(): palloc 语法树节点
-│    → pg_plan_query(): palloc 执行计划节点
-├──────────────────────────────────────────────────────
-│ 3. Executor 执行
-│    → 创建 ExprContext/TupleContext（子上下文）
-│    → 每行结果：在 TupleContext 分配 → 发送 → Reset
-│    → （循环中复用内存，避免频繁 malloc）
-├──────────────────────────────────────────────────────
-│ 4. 查询结束
-│    → MemoryContextDelete(QueryContext)
-│    → ✅ 所有 palloc 的内存一键释放，无泄漏
-├──────────────────────────────────────────────────────
-│ 5. 连接关闭
-│    → MemoryContextDelete(PortalContext)
-│    → ✅ 连接级资源全部清理
-└──────────────────────────────────────────────────────
-```
-
-> 🔑 **关键观察**：
->
-> - 每个阶段有明确的上下文边界
-> - 子上下文用于"临时/循环"内存，父上下文用于"阶段"内存
-> - 出错时直接删除上层上下文，自动清理所有子内存
