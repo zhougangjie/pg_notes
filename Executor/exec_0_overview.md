@@ -46,3 +46,52 @@
 4.  **外部排序**: 通过 `Tuplesortstate` 的内存-磁盘协同，解决超出 `work_mem` 的大数据集排序问题。
 
 这个框架保证了 PostgreSQL 既能处理复杂的 OLTP 事务，也能应对大规模的 OLAP 分析查询。
+
+```
+/* Portal & Executor */
+
+CreatePortal
+
+PortalDefineQuery // portal->stmts = plantree_list;
+
+PortalStart // Prepare a portal for execution. params, strategy, queryDesc
+	ExecutorStart // prepare the plan for execution
+		standard_ExecutorStart
+			InitPlan /* Initialize the plan state tree */
+				ExecInitNode
+					ExecInitSeqScan
+						ExecOpenScanRelation
+	PORTAL_READY
+
+PortalRun - PortalRunSelect
+
+	/* 5. Executor */
+	ExecutorRun - tandard_ExecutorRun - ExecutePlan // Processes the query plan until retrieved 'numberTuples' tuples
+		ExecProcNode - ExecSeqScan
+			ExecScan - ExecScanFetch - SeqNext // executor module
+				/* Access + Storage*/
+				table_scan_getnextslot - heap_getnextslot - heapgettup_pagemode
+					heapgetpage - ReadBufferExtended -  ReadBuffer_common
+
+						LockBuffer(buffer, BUFFER_LOCK_SHARE);
+
+						BufferGetPage - BufferGetBlock
+							return (Block) (BufferBlocks + ((Size) (buffer - 1)) * BLCKSZ);
+						for (lineoff = FirstOffsetNumber; lineoff <= lines; lineoff++)
+							PageGetItemId // Returns an item identifier of a page.
+								return &((PageHeader) page)->pd_linp[offsetNumber - 1];
+							PageGetItem // Retrieves an item on the given page.
+								return (Item) (((char *) page) + ItemIdGetOffset(itemId));
+
+						// True if heap tuple satisfies a time qual
+						HeapTupleSatisfiesVisibility - HeapTupleSatisfiesMVCC
+
+						LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
+
+					ExecStorePinnedBufferHeapTuple // buffer tuple -> tuple table
+						tts_buffer_heap_store_tuple
+							IncrBufferRefCount
+							return slot;
+				ExecProject
+PortalDrop
+```
