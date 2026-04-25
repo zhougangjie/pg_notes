@@ -258,7 +258,7 @@ RangeVarGetRelidExtended
 
 ### 系统表缓存 `SysCache`
 
-![](../assets/QueryProcess/SysCache%201.png)
+![](SysCache%201.png)
 
 > https://cloud.tencent.com/developer/article/2000765?from_column=20421&from=20421
 

@@ -1,4 +1,4 @@
-![](assets/insert.svg)
+![](../Storage/assets/insert.svg)
 
 # insert
 
