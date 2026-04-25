@@ -57,3 +57,13 @@ pre, code {
 .md-content__inner {
   margin-bottom: 4rem !important; /* 4rem 就是底部填充，你可以改成 3rem/5rem 调整 */
 }
+
+
+/* 限制所有文章中的图片最大宽度为 80%，且不超过 800px */
+.md-content__inner img {
+    max-width: 80%;
+    max-height: 600px; /* 防止过长图片占用过多垂直空间 */
+    height: auto;
+    display: block;
+    margin: 20px auto; /* 居中显示 */
+}
