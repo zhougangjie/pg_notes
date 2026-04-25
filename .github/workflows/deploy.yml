@@ -3,7 +3,7 @@ name: Deploy MkDocs
 on:
   push:
     branches:
-      - main  # 如果你是 master 就改成 master
+      - main
 
 permissions:
   contents: read
