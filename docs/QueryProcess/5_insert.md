@@ -1,7 +1,10 @@
-![](../Storage/assets/insert.svg)
-
 # insert
 
+![](../Storage/assets/insert.svg)
+
+- 调试语句：`insert into tb values(1)`
+
+- insert 核心流程梳理，将从最简单的插入数据开始，逐步讨论事务、锁、资源管理等相关内容
 - 调试语句：`insert into tb values(1)`
 
 ## `exec_simple_query` 流程概览
@@ -17,53 +20,118 @@ EndCommand
 finish_xact_command
 ```
 
-## insert流程
+## `exec_simple_query` 流程详解-插入数据
 
 ```cpp
-ExecutePlan - ExecProcNode - ExecProcNodeFirst
-    ExecModifyTable - ExecInsert
-        table_tuple_insert -heapam_tuple_insert
-            heap_insert
-	            TransactionId xid = GetCurrentTransactionId();
-                RelationGetBufferForTuple
-                RelationPutHeapTuple
-                    PageAddItem - PageAddItemExtended
-                        alignedSize = MAXALIGN(size); /* 8 字节对齐 */
-                        PageGetItemId /* 获取 ItemId */
-                        ItemIdSetNormal /* 设置元组偏移、标记、长度 */
-                        memcpy((char *) page + upper, item, size); /* 拷贝元组到 upper 位置 */
-                        phdr->pd_lower = (LocationIndex) lower; /* 更新 phdr lower */
-	                    phdr->pd_upper = (LocationIndex) upper; /* 更新 phdr upper */
-                        return offsetNumber;
-                    item->t_ctid = tuple->t_self;
-                MarkBufferDirty
-
-                /* WAL */
-                XLogBeginInsert
-                XLogRegisterData
-                XLogRegisterBuffer
-                XLogRegisterBufData
-                XLogRegisterBufData
-                XLogSetRecordFlags
-                XLogInsert
-                PageSetLSN
+/* ... */
+pg_plan_queries
+CreatePortal
+PortalDefineQuery
+PortalStart
+PortalRun | PortalRunMulti | ProcessQuery /* tcop */
+    CreateQueryDesc
+    ExecutorStart
+    ExecutorRun | standard_ExecutorRun | ExecutePlan | ExecProcNode | ExecProcNodeFirst /* executor */
+        ExecModifyTable | ExecInsert /* executor */
+            table_tuple_insert       /* access/tableam.h call Relation::TableAmRoutine::tuple_insert */
+                heapam_tuple_insert  /* access/heap/heapam_handler.c */
+                    heap_insert      /* access/heap/heapam.c */
+                        RelationGetBufferForTuple /* access/heap/hio.c */
+                        RelationPutHeapTuple      /* access/heap/hio.c */
+                            PageAddItemExtended   /* storage/page/bufpage.c */
+                        MarkBufferDirty(buffer)   /* storage/buffer/bufmgr.c */
+                        XLogInsert /* access/transam/xloginsert.c */
+                            XLogRecordAssemble
+                            XLogInsertRecord
+                        PageSetLSN
+    ExecutorFinish
+PortalDrop
+EndCommand
+finish_xact_command
 ```
 
-xact
+## `exec_simple_query` 流程详解-提交事务
 
 ```cpp
-exec_simple_query | finish_xact_command | CommitTransactionCommand
-    CommitTransaction | RecordTransactionCommit
-        /* WAL */
-        XactLogCommitRecord
-
-        /* Marks the given transaction and children as committed */
-        TransactionIdCommitTree | TransactionIdSetTreeStatus | TransactionIdSetPageStatus
-            TransactionIdSetPageStatusInternal
-                SimpleLruReadPage
-                TransactionIdSetStatusBit
-                    *byteptr = byteval;
+start_xact_command
+pg_parse_query
+pg_analyze_and_rewrite_fixedparams
+pg_plan_queries
+CreatePortal
+PortalDefineQuery
+PortalStart
+PortalRun | PortalRunMulti | ProcessQuery /* tcop */
+PortalDrop
+EndCommand
+finish_xact_command
+    CommitTransactionCommand
+        CommitTransaction
+            s->state = TRANS_COMMIT;
+            RecordTransactionCommit
+                XactLogCommitRecord
+                    XLogInsert
+                XLogFlush /* wal -> disk */
+                TransactionIdCommitTree
+                    TransactionIdSetTreeStatus
+                        TransactionIdSetPageStatus
+                            TransactionIdSetPageStatusInternal
+            s->state = TRANS_DEFAULT;
+    xact_started = false;
 ```
+
+
+## `exec_simple_query` 流程详解-完整过程
+
+```cpp
+start_xact_command
+    StartTransactionCommand
+        StartTransaction
+            s->state = TRANS_START;
+            /* initialize current transaction state fields */
+            /* ... */
+            s->state = TRANS_INPROGRESS;
+    xact_started = true;
+pg_parse_query
+pg_analyze_and_rewrite_fixedparams
+pg_plan_queries
+CreatePortal
+PortalDefineQuery
+PortalStart
+PortalRun | PortalRunMulti | ProcessQuery /* tcop */
+    CreateQueryDesc
+    ExecutorStart
+    ExecutorRun | standard_ExecutorRun | ExecutePlan | ExecProcNode | ExecProcNodeFirst /* executor */
+        ExecModifyTable | ExecInsert /* executor */
+            table_tuple_insert       /* access/tableam.h call Relation::TableAmRoutine::tuple_insert */
+                heapam_tuple_insert  /* access/heap/heapam_handler.c */
+                    heap_insert      /* access/heap/heapam.c */
+                        RelationGetBufferForTuple /* access/heap/hio.c */
+                        RelationPutHeapTuple      /* access/heap/hio.c */
+                            PageAddItemExtended   /* storage/page/bufpage.c */
+                        MarkBufferDirty(buffer)   /* storage/buffer/bufmgr.c */
+                        XLogInsert /* access/transam/xloginsert.c */
+                            XLogRecordAssemble
+                            XLogInsertRecord
+                        PageSetLSN
+    ExecutorFinish
+PortalDrop
+EndCommand
+finish_xact_command
+    CommitTransactionCommand
+        CommitTransaction
+            s->state = TRANS_COMMIT;
+            RecordTransactionCommit
+                XactLogCommitRecord
+                    XLogInsert
+                XLogFlush /* wal -> disk */
+                TransactionIdCommitTree
+                    TransactionIdSetTreeStatus
+                        TransactionIdSetPageStatus
+                            TransactionIdSetPageStatusInternal
+            s->state = TRANS_DEFAULT;
+    xact_started = false;
+```
+
 
 ## insert 的延迟状态更新
 

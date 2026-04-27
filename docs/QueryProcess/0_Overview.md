@@ -1,8 +1,10 @@
 
-# 核心函数 `exec_simple_query`
+# Overview
 
 - [A Comprehensive Overview of PostgreSQL Query Processing Stages](https://www.highgo.ca/2024/01/26/a-comprehensive-overview-of-postgresql-query-processing-stages/)
 - [The Internals of PostgreSQL: 3 Query Processing](https://www.interdb.jp/pg/pgsql03/01.html)
+
+核心函数 `exec_simple_query`
 
 ![](assets/exec_simple_query.png)
 

@@ -1,10 +1,12 @@
+# delete
+
 ![](../Storage/assets/delete.svg)
 
 在 PG 中，所谓的**删除**其实是**标记死亡** + **空间异步回收**。
 
 ---
 
-### 1. 第一阶段：打上“死亡标记”
+## 打上“死亡标记”
 
 执行 `DELETE FROM tb WHERE a = 1;` 时，磁盘上的数据并不会立即消失，而是发生了以下变化：
 
@@ -26,7 +28,7 @@ ExecutePlan | ExecProcNode | ExecProcNodeFirst
                         compute_new_xmax_infomask
 ```
 
-### 2. 第二阶段：页内修剪（Page Pruning）
+## 页内修剪（Page Pruning）
 
 这是为了防止 Page 空间过早耗尽。当下次有事务访问这个 Page，或者 Page 空间不足时：
 
@@ -35,7 +37,7 @@ ExecutePlan | ExecProcNode | ExecProcNodeFirst
 - **指针重设**：`ItemId` 里的 `off` 被清空或重定向，但这个 `ItemId` **小方块本身还在**。
 - **空间释放**：你图中的 `free space` 区域会由于元组的抹除而物理增大。
 
-### 3. 第三阶段：彻底清理（VACUUM）
+## 彻底清理（VACUUM）
 
 虽然元组物理消失了，但那个 `ItemId` 指针还在占用 `pd_lower` 的空间。
 
@@ -45,7 +47,7 @@ ExecutePlan | ExecProcNode | ExecProcNodeFirst
 
 ---
 
-### 总结
+## 总结
 
 - **逻辑删除 = 写 `t_xmax`**：数据依然在磁盘，只是通过 MVCC 逻辑让别人“看不见”。
 - **空间回收 = 移动 `upper` 指针**：通过 `Pruning` 或 `VACUUM` 把原本被占据的区域划归回 `free space`。

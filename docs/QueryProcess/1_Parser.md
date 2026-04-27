@@ -1,4 +1,4 @@
-# 语法分析 `pg_parse_query`
+# Parser
 
 1. 相关函数: `pg_parse_query`
 

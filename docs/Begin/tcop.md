@@ -1,4 +1,6 @@
-# (tcop)Traffic COntrol Program
+# tcop
+
+> tcop = Traffic COntrol Program
 
 ## 命令分类
 

@@ -1,4 +1,6 @@
-# 锁概述
+# lock readme
+
+锁概述
 
 Postgres 使用四种类型的进程间锁：
 
