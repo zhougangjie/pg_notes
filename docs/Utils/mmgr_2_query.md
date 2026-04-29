@@ -7,7 +7,8 @@ TopPortalContext
 └── PortalContext
 	└── QueryContext("ExecutorState")
 		├── ExprContext
-		└── tmpcontext("printtup")
+		├── tmpcontext("printtup")
+		└── SortContext | HashContext
 ```
 
 ## "simple Query"
