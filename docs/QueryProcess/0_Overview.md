@@ -75,7 +75,13 @@ PortalRun - PortalRunSelect
 			ExecScan - ExecScanFetch - SeqNext // executor module
 				/* Access + Storage*/
 				table_scan_getnextslot - heap_getnextslot - heapgettup_pagemode
-					heapgetpage - ReadBufferExtended -  ReadBuffer_common
+					heapgetpage
+						ReadBufferExtended
+							ReadBuffer_common
+								BufferAlloc
+									InitBufferTag
+									LWLockAcquire(newPartitionLock, LW_SHARED);
+								    existing_buf_id = BufTableLookup(&newTag, newHash);
 
 						LockBuffer(buffer, BUFFER_LOCK_SHARE);
 
@@ -87,15 +93,14 @@ PortalRun - PortalRunSelect
 							PageGetItem // Retrieves an item on the given page.
 								return (Item) (((char *) page) + ItemIdGetOffset(itemId));
 
-						// True if heap tuple satisfies a time qual
-						HeapTupleSatisfiesVisibility - HeapTupleSatisfiesMVCC
+							// True if heap tuple satisfies a time qual
+							HeapTupleSatisfiesVisibility - HeapTupleSatisfiesMVCC
+							
+							HeapCheckForSerializableConflictOut
+							
+							scan->rs_vistuples[ntup++] = lineoff;
 
 						LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
-
-					ExecStorePinnedBufferHeapTuple // buffer tuple -> tuple table
-						tts_buffer_heap_store_tuple
-							IncrBufferRefCount
-							return slot;
 				ExecProject
 PortalDrop
 ```
