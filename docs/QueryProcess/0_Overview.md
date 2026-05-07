@@ -76,17 +76,12 @@ PortalRun - PortalRunSelect
 				/* Access + Storage*/
 				table_scan_getnextslot - heap_getnextslot - heapgettup_pagemode
 					heapgetpage
-						ReadBufferExtended
-							ReadBuffer_common
-								BufferAlloc
-									InitBufferTag
-									LWLockAcquire(newPartitionLock, LW_SHARED);
-								    existing_buf_id = BufTableLookup(&newTag, newHash);
-
+						ReadBufferExtended | ReadBuffer_common
 						LockBuffer(buffer, BUFFER_LOCK_SHARE);
 
 						BufferGetPage - BufferGetBlock
 							return (Block) (BufferBlocks + ((Size) (buffer - 1)) * BLCKSZ);
+						
 						for (lineoff = FirstOffsetNumber; lineoff <= lines; lineoff++)
 							PageGetItemId // Returns an item identifier of a page.
 								return &((PageHeader) page)->pd_linp[offsetNumber - 1];
@@ -95,12 +90,9 @@ PortalRun - PortalRunSelect
 
 							// True if heap tuple satisfies a time qual
 							HeapTupleSatisfiesVisibility - HeapTupleSatisfiesMVCC
-							
 							HeapCheckForSerializableConflictOut
-							
 							scan->rs_vistuples[ntup++] = lineoff;
 
 						LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
-				ExecProject
 PortalDrop
 ```

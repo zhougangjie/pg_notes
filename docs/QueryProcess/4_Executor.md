@@ -88,36 +88,28 @@ for (;;)
 
 ```cpp
 ExecProcNode - ExecSeqScan
-    ExecScan - ExecScanFetch - SeqNext // executor module
-        table_beginscan
-            heap_beginscan
-                scan->rs_base.rs_rd = relation;
-                scan->rs_base.rs_snapshot = snapshot;
-                scan->rs_base.rs_nkeys = nkeys;
-        /* Access + Storage*/
-        table_scan_getnextslot - heap_getnextslot - heapgettup_pagemode
-            heapgetpage - ReadBufferExtended -  ReadBuffer_common
+	ExecScan - ExecScanFetch - SeqNext // executor module
+		/* Access + Storage*/
+		table_scan_getnextslot - heap_getnextslot - heapgettup_pagemode
+			heapgetpage
+				ReadBufferExtended | ReadBuffer_common
+				LockBuffer(buffer, BUFFER_LOCK_SHARE);
 
-                LockBuffer(buffer, BUFFER_LOCK_SHARE);
+				BufferGetPage - BufferGetBlock
+					return (Block) (BufferBlocks + ((Size) (buffer - 1)) * BLCKSZ);
+				
+				for (lineoff = FirstOffsetNumber; lineoff <= lines; lineoff++)
+					PageGetItemId // Returns an item identifier of a page.
+						return &((PageHeader) page)->pd_linp[offsetNumber - 1];
+					PageGetItem // Retrieves an item on the given page.
+						return (Item) (((char *) page) + ItemIdGetOffset(itemId));
 
-                BufferGetPage - BufferGetBlock
-                    return (Block) (BufferBlocks + ((Size) (buffer - 1)) * BLCKSZ);
-                for (lineoff = FirstOffsetNumber; lineoff <= lines; lineoff++)
-                    PageGetItemId // Returns an item identifier of a page.
-                        return &((PageHeader) page)->pd_linp[offsetNumber - 1];
-                    PageGetItem // Retrieves an item on the given page.
-                        return (Item) (((char *) page) + ItemIdGetOffset(itemId));
+					// True if heap tuple satisfies a time qual
+					HeapTupleSatisfiesVisibility - HeapTupleSatisfiesMVCC
+					HeapCheckForSerializableConflictOut
+					scan->rs_vistuples[ntup++] = lineoff;
 
-                // True if heap tuple satisfies a time qual
-                HeapTupleSatisfiesVisibility - HeapTupleSatisfiesMVCC
-
-                LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
-
-            ExecStorePinnedBufferHeapTuple // buffer tuple -> tuple table
-                tts_buffer_heap_store_tuple
-                    IncrBufferRefCount
-                    return slot;
-        ExecProject
+				LockBuffer(buffer, BUFFER_LOCK_UNLOCK);
 ```
 
 
