@@ -1,4 +1,4 @@
-# buffer readme
+# Buffer readme
 
 关于共享缓冲区访问规则的说明
 (Notes About Shared Buffer Access Rules)

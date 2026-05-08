@@ -1,7 +1,16 @@
 
-# Buffer
+# Buffer Overview
 
-## Buffer Table
+## 核心价值:
+
+- **读优化:** 内存比磁盘快几个数量级。数据页首次读取后缓存在内存，后续访问直接命中内存，不再触发慢速磁盘 I/O。
+- **写优化:** 修改数据时先只改内存（标记为脏页），然后通过后台进程**异步、批量**刷回磁盘。避免每次修改都直接卡在慢速磁盘写上。
+
+## 内存结构:
+
+![](assets/data_buffer.png)
+
+1. Buffer Table
 
 - `SharedBufHash`
 - buf_table.c
@@ -27,7 +36,7 @@ typedef struct buftag
 } BufferTag;
 ```
 
-## BufferDescriptors
+2. `BufferDescriptors`
 
 - `BufferDescPadded *BufferDescriptors;`
 
@@ -47,4 +56,8 @@ typedef struct BufferDesc
 ```
 
 
-## BufferBlocks
+3. `BufferBlocks`
+
+- `char *BufferBlocks;`
+- shared memory
+- shared_buffers = 128M
