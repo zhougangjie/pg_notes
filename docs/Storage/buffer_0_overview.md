@@ -79,6 +79,11 @@ The ring buffer is a small, **temporary** buffer area. It is allocated in shared
 
 When a backend creates a temporary table, the buffer manager allocates a memory area for the backend and creates a local buffer.
 
+## 脏页落盘
+
+- Checkpointer: 缩短崩溃恢复（Crash Recovery）时间
+- Background Writer: 保证 Backend 进程随时有干净的 Buffer 可用(提前把 `nextVictimBuffer` 指针前方的脏页刷出)
+
 ## 参考文档
 
 - https://www.interdb.jp/pg/pgsql08/index.html
