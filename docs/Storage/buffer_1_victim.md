@@ -1,34 +1,61 @@
 # Buffer Victim
 
-## ReadBuffer
+## 读取缓存
 
 ```c
-heapgetpage
-	ReadBufferExtended
-		ReadBuffer_common
+heapgettup_pagemode
+	heapgetpage
+		ReadBufferExtended | ReadBuffer_common
+			/* 1. Local Buffers */
+
+			/* 2. Shared Buffers */
 			BufferAlloc
-				GetVictimBuffer*
-					StrategyGetBuffer
-				PinBuffer
+
+				/* A. Cache Hit */
 				StartBufferIO*
+
+				/* B. Cache Miss */
+				GetVictimBuffer
+					StrategyGetBuffer
+
+						/* a. GetBufferFromRing */
+						/* b. firstFreeBuffer */
+						/* c. clock sweep(REFCOUNT >= USAGECOUNT) */
+						if REFCOUNT == 0 && USAGECOUNT == 0
+
+				BufTableInsert
+				StartBufferIO*
+
 			smgrread*
 			TerminateBufferIO*
-			
+
 			return BufferDescriptorGetBuffer(bufHdr);
+
+		HeapTupleSatisfiesVisibility
+		scan->rs_vistuples[ntup++] = lineoff;
+	lineoff = scan->rs_vistuples[lineindex];
+	lpp = PageGetItemId(page, lineoff);
+
+	/* end of scan */
+	if (BufferIsValid(scan->rs_cbuf))
+		ReleaseBuffer(scan->rs_cbuf);
 ```
 
-## 缓存获取
+## 获取缓存
 
 - GetBufferFromRing
 - StrategyControl->firstFreeBuffer
-- Clock Sweep
+- Clock Sweep(时钟扫描算法)
 
 ```c
 BufferDesc *
 StrategyGetBuffer(BufferAccessStrategy strategy, uint32 *buf_state, bool *from_ring)
 {
-	/* ... */
-	
+	/* a. GetBufferFromRing ... */
+	/* b. firstFreeBuffer ... */
+
+	/* c. clock sweep(REFCOUNT >= USAGECOUNT) */
+
 	/* Nothing on the freelist, so run the "clock sweep" algorithm */
 	trycounter = NBuffers;
 	for (;;)
