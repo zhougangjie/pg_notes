@@ -12,8 +12,9 @@
 ## 执行流程梳理
 
 ```c
-/* Portal & Executor */
+/* ... */
 
+/* Portal & Executor */
 CreatePortal
 
 PortalDefineQuery // portal->stmts = plantree_list;
@@ -22,20 +23,19 @@ PortalStart // Prepare a portal for execution. params, strategy, queryDesc
 	ExecutorStart // prepare the plan for execution
 		standard_ExecutorStart
 			InitPlan /* Initialize the plan state tree */
-				ExecInitNode
-					ExecInitSeqScan
-						ExecOpenScanRelation
+				**ExecInitNode** | ExecInitSeqScan
+					ExecOpenScanRelation
 	PORTAL_READY
 
-PortalRun - PortalRunSelect
+PortalRun | PortalRunSelect
 
 	/* Executor */
-	ExecutorRun - tandard_ExecutorRun - ExecutePlan // Processes the query plan until retrieved 'numberTuples' tuples
-		ExecProcNode - ExecSeqScan
-			ExecScan - ExecScanFetch - SeqNext // executor module
+	ExecutorRun | tandard_ExecutorRun | ExecutePlan // Processes the query plan until retrieved 'numberTuples' tuples
+		**ExecProcNode** | ExecSeqScan
+			ExecScan | ExecScanFetch | SeqNext // executor module
 				/* Access + Storage*/
-				table_scan_getnextslot - heap_getnextslot - heapgettup_pagemode
-					heapgetpage - ReadBufferExtended -  ReadBuffer_common
+				table_scan_getnextslot | heap_getnextslot | heapgettup_pagemode
+					heapgetpage | ReadBufferExtended | ReadBuffer_common
 PortalDrop
 	PortalCleanup
 		ExecutorFinish
@@ -43,24 +43,7 @@ PortalDrop
 			AfterTriggerEndQuery
 		ExecutorEnd
 			ExecEndPlan
-				ExecEndNode
+				**ExecEndNode** | ExecEndSeqScan
 		FreeQueryDesc
-
-	PortalHashTableDelete(portal)
-	ResourceOwnerRelease
-	MemoryContextDelete(portal->portalContext);
-	pfree(portal);
-
-finish_xact_command
-	CommitTransactionCommand
-		CommitTransaction
 ```
 
-核心数据结构(TODO)
-
-- Portal
-- QueryDesc
-- EState
-- PlanState
-- TupleTableSlot
-- TupleDesc
