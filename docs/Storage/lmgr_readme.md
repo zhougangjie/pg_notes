@@ -37,6 +37,7 @@ Postgres 使用四种类型的进程间锁：
 
 此外，每个后端进程还会为它当前正在持有或请求的每个可锁定对象及锁模式，维护一个**非共享的 `LOCALLOCK` 结构体**。
 共享锁结构体仅允许针对每个“可锁定对象/锁模式/后端进程”组合进行**一次**锁授予。然而，在后端进程内部，同一个锁可能在事务中被多次请求甚至释放，也可以同时以事务级和会话级的方式持有。内部的**请求计数**保存在 `LOCALLOCK` 中，这样就不需要访问共享数据结构来修改它们了。
+
 ### LOCK
 
 ```cpp
@@ -152,7 +153,7 @@ typedef struct LOCK
 3.  **无锁优化 (`releaseMask`)**：`releaseMask` 的设计体现了高性能数据库的典型特征——在能保证正确性的前提下（只有所有者能改），尽可能减少锁竞争，让事务清理阶段更快。
 
 ```
-[LOCK: Table A] 
+[LOCK: Table A]
     |
     +-- procLocks (链表) --> [PROCLOCK: Proc 1 & Table A] --> [PROCLOCK: Proc 2 & Table A] --> ...
     |                             |                               |
@@ -193,6 +194,7 @@ static HTAB *LockMethodLocalHash;
 ```
 
 [draw_proclock](assets/draw_proclock.md)
+
 ## 锁管理器内部锁定机制
 
 在 PostgreSQL 8.2 之前，锁管理器使用的所有共享内存数据结构都由**单个**轻量级锁（LWLock）—— `LockMgrLock` 进行保护；任何涉及这些数据结构的操作都必须独占性地锁定 `LockMgrLock`。不出所料，这成为了一个竞争瓶颈。
@@ -300,13 +302,12 @@ SetupLockInTable(LockMethod lockMethodTable, PGPROC *proc,
 **死锁检测：**
 死锁检测**不需要**检查快速路径数据结构，因为任何可能卷入死锁的锁，在此之前都必然已经被转移到了主表中。
 
-The Deadlock Detection Algorithm
---------------------------------
-Miscellaneous Notes
--------------------
-Group Locking
--------------
-User Locks (Advisory Locks)
----------------------------
-Locking during Hot Standby
---------------------------
+## The Deadlock Detection Algorithm
+
+## Miscellaneous Notes
+
+## Group Locking
+
+## User Locks (Advisory Locks)
+
+## Locking during Hot Standby
