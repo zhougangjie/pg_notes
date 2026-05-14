@@ -13,7 +13,7 @@ build/
 # *.pdf
 *.html
 *.mp4
-temp
+tmp
 reveal.js/
 
 .clang-format
